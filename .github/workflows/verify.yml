@@ -1,0 +1,40 @@
+name: Verify
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            runtime: win-x64
+          - os: ubuntu-latest
+            runtime: linux-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Restore build dependencies
+        run: dotnet restore build/Build.csproj --locked-mode
+      - name: Verify and publish
+        run: dotnet run --project build/Build.csproj --configuration Release --no-restore -- --target Publish --runtime ${{ matrix.runtime }} --locked-restore
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workspace-access-${{ matrix.runtime }}
+          path: artifacts/publish/${{ matrix.runtime }}/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.runtime }}
+          path: artifacts/test-results/
+          if-no-files-found: ignore

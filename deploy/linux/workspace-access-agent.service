@@ -1,0 +1,12 @@
+[Unit]
+Description=Workspace Access User Agent
+
+[Service]
+Type=simple
+ExecStart=/opt/workspace-access/WorkspaceAccessHost agent
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+[Install]
+WantedBy=default.target

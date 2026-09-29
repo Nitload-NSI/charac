@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+artifacts/
+.vs/
+.idea/
+.nuke/temp/
+*.user
+*.suo
+appsettings.Local.json
+.env
