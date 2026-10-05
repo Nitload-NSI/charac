@@ -1,17 +1,39 @@
-# 平台发布与部署
+# 平台部署
 
-| 项目 | Windows | Linux |
-| --- | --- | --- |
-| 发布 RID | `win-x64`、`win-arm64` | `linux-x64`、`linux-arm64` |
-| 产品入口 | `WorkspaceAccessHost.exe host` / `agent` | `WorkspaceAccessHost host` / `agent` |
-| 服务管理 | SCM 注册、启动类型和账户配置 | systemd unit、服务账户和目录权限 |
-| 用户代理启动 | 用户登录启动任务或用户启动项 | 用户上下文启动组件或 user unit |
-| 本机通信路径 | 命名管道 | `/run` 下受控 socket 路径 |
+当前提供 Windows x64 Client MSI、Fedora/RHEL 系 Linux x64 Server RPM 和 Client RPM，以及 Termux aarch64 Client DEB。RPM/MSI 由 .NET 10 发布目录生成；`packaging/package.ps1` 只负责封装，发布目录必须先经过 NUKE `Publish`（含 `Verify`）。Android/One UI 的 Termux 启动器 APK 已可生成调试包，需与 Termux DEB 配合，见 [Android 客户端](android-client.md)。
 
-NUKE `Publish` 先执行 Verify，再发布单一产品的 self-contained 产物，并复制平台部署模板。输出位于 `artifacts/publish/<runtime>/`，根目录包含可执行文件、配置与运行时依赖，`deploy/` 包含部署模板。Host 和 Agent 使用同一可执行文件，通过启动参数选择角色，整套产物统一部署和更新。
+在仓库根目录执行：
 
-服务配置使用发布目录中的 `appsettings.json` 和 .NET 环境变量覆盖。初始 HTTP 端点位于 loopback。远程传输集成时由受控 TLS 入口提供 WSS，并配置 host 白名单、认证及 Origin 策略。
+```powershell
+$env:NuGetAudit='false'
+.\build.ps1 --target Publish --runtime linux-x64 --locked-restore
+.\build.ps1 --target Publish --runtime win-x64 --locked-restore
+.\build.ps1 --target Publish --runtime linux-bionic-arm64 --locked-restore
+.\packaging\package.ps1 -Target ServerRpm
+.\packaging\package.ps1 -Target ClientRpm
+.\packaging\package.ps1 -Target ClientMsi
+.\packaging\package.ps1 -Target ClientTermuxDeb
+```
 
-x64 的 Windows 与 Linux 验证流程由 CI 分别执行。ARM64 产物通过指定 RID 发布，并在对应硬件或虚拟机完成运行验收。
+封装需要 [nFPM](https://nfpm.goreleaser.com/) 2.47.0 和 [WiX Toolset](https://wixtoolset.org/) 6.0.2。脚本默认从 `temp/tools/nfpm/nfpm.exe`、`temp/tools/wix.exe` 寻找，也可传 `-NfpmPath`、`-WixPath`。输出在 `artifacts/packages/`；这两个工具和发布产物均不提交仓库。Fedora/RHEL 的 ARM64 RPM 尚未配置。
 
-部署步骤见 [Windows](../../deploy/windows/README.md) 与 [Linux](../../deploy/linux/README.md)。服务安装由部署人员执行。
+## Server RPM 首次部署前提
+
+这套部署复用现有 authentik、PostgreSQL、Caddy 和内网 sshd，不需要在 Server RPM 内再部署一套身份平台。安装包只装程序、systemd 单元和非 root 服务账户，不会自动填入生产配置、创建数据库、配置反向代理或向目标 sshd 登记公钥。首次上线按下列顺序准备：
+
+1. 确认 Server 主机能访问 PostgreSQL、authentik 的 OIDC discovery/JWKS，以及内网各目标的 SSH 端口；公网只暴露 Caddy 的 HTTPS 入口，不暴露 PostgreSQL 和目标 SSH。
+2. 在 PostgreSQL 创建专用数据库和受限角色。安装 RPM 后将配置写入 `/etc/charac/workspace-access.config`，填 `[database]`、`[oidc]`、`[server]` 和 `[ssh_keys]`；文件只允许 `charac` 服务账户读取。用同一配置执行 `char_rac_server --config /etc/charac/workspace-access.config database migrate`，然后核对迁移结果。服务正常启动不会自动迁移。
+3. 在 authentik 为 CLI 准备 public OIDC Provider，启用 PKCE 和本机动态 loopback 回调；Server 配置正确的 issuer、client ID 和 discovery URL。详情见[认证](../authentication.md)。
+4. 创建服务账户持有的 `/var/lib/charac/keys`（目录 `0700`，私钥 `0600`），从可信渠道核对目标 sshd 主机公钥。使用本机 `endpoint_regist` 导入 Server 登录私钥、登记目标，并授权 OIDC subject 到目标 OS 账户；目标账户的 `authorized_keys` 也须信任相应登录公钥。详情见[SSH 登记](../ssh-session.md#三参数交互式端点登记)。
+5. 配置 Caddy 的域名、TLS 和到 Server 监听地址的反向代理；需要读取真实客户端 IP 时再设置 `[server] trusted_proxy`。最后启动 `charac-server.service`，检查 `systemctl status` 与 `journalctl -u charac-server`，再从 Client 完成真实登录和 SSH 连接。
+
+当前 `/health/ready` 还包含未完成能力标记，可能返回 503；不要将它作为首次部署成功的唯一判据。运行时可核对进程状态、数据库迁移、OIDC 登录和实际工作区连接。Server RPM 不启动 PostgreSQL 容器；数据库可以是独立容器或现有 PostgreSQL 实例。
+
+Server RPM 安装自包含程序到 `/opt/charac/server`，安装 `charac-server.service` 和专用 `charac` 系统账户。包不会携带运行配置、数据库密码或 SSH 私钥，也不会在安装时自动启动服务。部署机上准备 `/etc/charac/workspace-access.config`（只允许服务账户读取），在 `[ssh_keys]` 指定 `/var/lib/charac/keys`，该目录及私钥由 `charac` 拥有且不允许其他用户访问。配置样例安装于 `/usr/share/doc/charac-server/workspace-access.config.example`。准备 PostgreSQL 数据库并执行迁移后，再用 `systemctl enable --now charac-server` 启动。服务监听地址和 Caddy 等反向代理按实际部署配置；Server 只需能访问内网 SSH 目标。详情见 [Linux 部署](../../deploy/linux/README.md)。
+
+
+Server 运行时只需 `--config /etc/charac/workspace-access.config`。这一个 INI 保存监听地址、OIDC 信息、PostgreSQL 连接参数和 `[ssh_keys] directory`；它不负责启动 PostgreSQL 容器。PostgreSQL 容器及其数据卷应由独立的数据库部署管理，RAC 只使用受限数据库账户连接。`charac` 是非 root 的系统服务账户，`StateDirectory=charac` 负责 `/var/lib/charac`，`/var/lib/charac/keys` 建议设为该账户所有、目录 `0700`、私钥 `0600`。当前没有磁盘会话缓存或单独日志文件：工作区状态留在 Server 内存与数据库历史中，标准日志进入 systemd journal，可用 `journalctl -u charac-server` 查看。无需额外配置 `CacheDirectory` 或 `LogsDirectory`；将来确有持久快照或文件日志时再增加。服务通过高端口监听，由 Caddy 承接 443，无需为网络入口提升 Server 到 root。
+Client RPM 安装自包含程序到 `/opt/charac/client`，并提供 `/usr/bin/charac` 命令。Windows MSI 安装到 `Program Files\nitload\Charac Client`，把安装目录加入系统 `PATH`；新终端可运行 `charac.exe --help`。MSI 内嵌所需文件，不依赖独立 CAB。两个 Client 包均不预置登录令牌或目标配置。
+
+RPM 尚需在目标 Fedora/RHEL 机器进行实际安装、升级、卸载和 systemd 验收；Termux DEB 尚需在真实 Android/Termux 设备上安装、启动和登录验收；MSI 尚需在正常启用 Windows Installer 服务的 Windows 机器进行安装、升级、卸载验收。当前构建环境完成了 RPM 生成及文件头检查、Termux DEB 控制字段和文件路径检查、MSI 生成及文件表反编译检查；受限环境里的 ICE 校验无法连接 Windows Installer 服务。
+Client 可在用户级 INI 的 `[client] server` 写入默认 HTTPS origin，样例见仓库根目录 `client.config.example`；Client RPM 另安装到 `/usr/share/doc/charac-client/client.config.example`，MSI 则安装到程序目录。Windows 默认读取 `%APPDATA%\Charac\client.config`；Linux/Termux 默认读取 `$XDG_CONFIG_HOME/charac/client.config`，未设置时读取 `~/.config/charac/client.config`。之后直接执行 `charac connect`（Windows 为 `charac.exe connect`）；`--server <origin>` 可临时覆盖，`--config <路径>` 可在命令前选用其他配置。该文件只存入口地址，不存 OIDC 令牌；旧版 `%APPDATA%\CharRAC`、`~/.config/char-rac` 配置在新位置不存在时仍会自动读取。Client 安装级设备凭据仍独立存于用户本地应用数据目录，不能复制到多台设备共用。

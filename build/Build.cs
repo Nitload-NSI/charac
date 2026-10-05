@@ -5,7 +5,7 @@ using Nuke.Common.Tools.DotNet;
 using Serilog;
 using static Nuke.Common.Tools.DotNet.DotNetTasks;
 
-namespace WorkspaceAccess.Build;
+namespace Charac.Build;
 
 internal sealed class Build : NukeBuild
 {
@@ -18,15 +18,16 @@ internal sealed class Build : NukeBuild
     [Parameter("Build configuration (Debug or Release).")]
     readonly string Configuration = "Release";
 
-    [Parameter("Publish runtime: win-x64, win-arm64, linux-x64 or linux-arm64.")]
+    [Parameter("Publish runtime: win-x64, win-arm64, linux-x64, linux-arm64 or linux-bionic-arm64 (client only).")]
     readonly string? Runtime;
 
     [Parameter("Require dependency versions from packages.lock.json.")]
     readonly bool LockedRestore;
 
-    AbsolutePath SolutionFile => RootDirectory / "WorkspaceAccessHost.slnx";
-    AbsolutePath ProductProject => RootDirectory / "src/WorkspaceAccessHost.csproj";
-    AbsolutePath TestProject => RootDirectory / "tests/WorkspaceAccessHost.Tests/WorkspaceAccessHost.Tests.csproj";
+    AbsolutePath SolutionFile => RootDirectory / "WorkspaceAccess.slnx";
+    AbsolutePath ServerProject => RootDirectory / "src/server/WorkspaceAccessServer.csproj";
+    AbsolutePath ClientProject => RootDirectory / "src/client/WorkspaceAccessClient.csproj";
+    AbsolutePath TestProject => RootDirectory / "tests/WorkspaceAccessServer.Tests/WorkspaceAccessServer.Tests.csproj";
     AbsolutePath Artifacts => RootDirectory / "artifacts";
 
     Target Restore => _ => _
@@ -63,42 +64,56 @@ internal sealed class Build : NukeBuild
         .Requires(() => Runtime)
         .Executes(() =>
         {
-            string[] supported = ["win-x64", "win-arm64", "linux-x64", "linux-arm64"];
+            string[] supported = ["win-x64", "win-arm64", "linux-x64", "linux-arm64", "linux-bionic-arm64"];
             if (!supported.Contains(Runtime, StringComparer.Ordinal))
             {
                 throw new ArgumentException($"Runtime must be one of: {string.Join(", ", supported)}.");
             }
 
             var destination = Artifacts / "publish" / Runtime!;
+            if (Runtime != "linux-bionic-arm64")
+            {
+                DotNetPublish(settings => settings
+                    .SetProject(ServerProject)
+                    .SetConfiguration(Configuration)
+                    .SetRuntime(Runtime)
+                    .SetProcessAdditionalArguments("--disable-build-servers")
+                    .SetSelfContained(true)
+                    .SetProperty("RestoreLockedMode", LockedRestore)
+                    .SetOutput(destination / "server"));
+            }
+
             DotNetPublish(settings => settings
-                .SetProject(ProductProject)
+                .SetProject(ClientProject)
                 .SetConfiguration(Configuration)
                 .SetRuntime(Runtime)
                 .SetProcessAdditionalArguments("--disable-build-servers")
-                .SetSelfContained(true)
+                .SetSelfContained(Runtime != "linux-bionic-arm64")
                 .SetProperty("RestoreLockedMode", LockedRestore)
-                .SetOutput(destination));
+                .SetOutput(destination / "client"));
 
-            var deployment = Runtime!.StartsWith("win-", StringComparison.Ordinal) ? "windows" : "linux";
-            CopyDirectory(RootDirectory / "deploy" / deployment, destination / "deploy");
-            Log.Information("Published WorkspaceAccessHost to {Directory}", destination);
+            if (Runtime != "linux-bionic-arm64")
+            {
+                var deployment = Runtime!.StartsWith("win-", StringComparison.Ordinal) ? "windows" : "linux";
+                CopyDirectory(RootDirectory / "deploy" / deployment, destination / "server" / "deploy");
+            }
+            Log.Information("Published {Runtime} artifacts to {Directory}", Runtime, destination);
         });
 
-    Target RunHost => _ => _
+    Target RunServer => _ => _
         .DependsOn(Compile)
         .Executes(() => DotNetRun(settings => settings
-            .SetProjectFile(ProductProject)
+            .SetProjectFile(ServerProject)
             .SetConfiguration(Configuration)
-            .SetApplicationArguments("host")
             .EnableNoBuild()
             .EnableNoRestore()));
 
-    Target RunAgent => _ => _
+    Target RunClient => _ => _
         .DependsOn(Compile)
         .Executes(() => DotNetRun(settings => settings
-            .SetProjectFile(ProductProject)
+            .SetProjectFile(ClientProject)
             .SetConfiguration(Configuration)
-            .SetApplicationArguments("agent")
+            .SetApplicationArguments("--help")
             .EnableNoBuild()
             .EnableNoRestore()));
 

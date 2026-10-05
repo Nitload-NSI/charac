@@ -1,0 +1,22 @@
+[Unit]
+Description=Workspace Access Server
+After=network.target
+
+[Service]
+Type=notify
+User=workspace-access
+Group=workspace-access
+WorkingDirectory=/opt/workspace-access
+ExecStart=/opt/workspace-access/char_rac_server
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+RuntimeDirectory=workspace-access
+StateDirectory=workspace-access
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

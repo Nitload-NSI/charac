@@ -1,53 +1,33 @@
 # 组件架构
 
-## 运行结构
+## 目标链路
 
 ```mermaid
 flowchart LR
-    Client[远程客户端] -->|OIDC 登录| Auth[authentik]
-    Client -->|WSS| Broker[Host / Broker]
-    Broker --> Policy[认证校验与系统账户映射]
-    Broker --> Gate[Host 独占控制权]
-    Broker -->|本机认证 IPC| Agent[用户会话代理]
-    Agent --> Terminal[PTY 与终端状态]
-    Terminal --> Shell[shell / TUI 进程]
+    Client[CLI] -->|OIDC| Auth[authentik]
+    Client -->|HTTPS / WebSocket| Server[Workspace Access Server]
+    Server --> Policy[授权与账户映射]
+    Policy --> Manager[Session Manager]
+    Manager --> Gate[工作区控制权]
+    Manager --> SSHAuth[后端 SSH 凭据与主机信任]
+    Manager -->|内网 SSH| Sshd[Windows / Linux sshd]
+    Sshd --> Shell[用户 shell / TUI]
 ```
 
-## 代码组织
+Server 对每个工作区持有一条后端 SSH 会话。WebSocket 只是客户端附着；断开时 Server 继续读取 SSH 输出。工作区之间有独立归属与控制权。身份由 `(issuer, subject)` 确定，系统账户由服务端映射。
 
-解决方案包含一个产品项目 `src/WorkspaceAccessHost.csproj`、一个测试项目 `WorkspaceAccessHost.Tests` 和一个 NUKE 构建项目 `Build`。产品代码直接在 `src/` 下通过目录和命名空间组织职责：
+## 项目组织
 
-| 产品目录 | 职责 |
-| --- | --- |
-| `Core/` | 共享模型、平台描述和契约 |
-| `Authentication/` | 外部身份、认证与系统账户映射 |
-| `Connections/` | 连接控制权、接管和工作区归属 |
-| `Terminals/` | PTY 契约、终端状态与输入输出 |
-| `Platforms/Windows/` | Windows 平台策略及 ConPTY、用户令牌、命名管道的实现位置 |
-| `Platforms/Linux/` | Linux 平台策略及 PTY、UID/GID、Unix socket 的实现位置 |
-| `Hosting/` | 服务生命周期、网络入口、连接仲裁和健康检查 |
-| `Agent/` | 用户上下文中的终端、子进程和画面状态 |
+解决方案包含 `src/server/WorkspaceAccessServer.csproj`、`src/client/WorkspaceAccessClient.csproj`、`tests/WorkspaceAccessServer.Tests` 和 `build/Build.csproj`。Server 的 `Authentication/` 放 OIDC 配置、身份模型与授权解析，`Connections/` 放工作区控制权，`Hosting/` 放 HTTP/WebSocket 入口。`Ssh/` 已实现密码及托管私钥 SSH Broker、主机公钥校验、Session Manager 和本机诊断命令；SSH CA 与密钥实机验收仍待完成，详见[SSH 会话设计](ssh-session.md)。
 
-领域逻辑依赖接口与共享模型，系统调用集中在对应平台目录，入口负责注册平台实现。
+CLI 的 `login` 和 `connect` 通过单一域名发现 OIDC 配置，复用 PKCE 浏览器登录与回调页，并让 Server 验证身份；`connect` 从受保护的 `/resources` 取得当前授权目标及会话状态，选择后按目标或会话 ID 的 query 建立正式 WebSocket 交互；也支持直接指定 ID。原有一次性 Linux `ls` 命令继续用于诊断。demo 和正式 Client 的真实 authentik 登录及 Server 身份验证已实测通过，正式整链路的交互验收尚待完成，见[单域名入口](client-server-transport.md)。Caddy 等反向代理可承接公网 TLS 入口；内网 `sshd` 只允许 Server 访问。Windows OpenSSH 已使用 ConPTY，因此 Server 不再自己启动 `pwsh.exe` 或实现平台 PTY。
 
-## 程序角色
+## 信任与生命周期
 
-同一套发布产物以 `WorkspaceAccessHost host` 运行服务宿主，以 `WorkspaceAccessHost agent` 运行用户代理。Windows 可执行文件带 `.exe` 扩展名。角色参数后的选项传递给对应宿主构建器；无参数或 `--help` 显示使用方式，未知角色以退出码 2 结束。
+OIDC 授权与 SSH 后端认证是两个边界。Server 只能为已授权的目标账户建立 SSH 会话，需校验目标主机密钥；后端 SSH 凭据不能代替外部连接的 OIDC 授权判断。若未来选择 SSH CA，还需在目标 OpenSSH 版本验收证书和账户映射。
 
-Host 和 Agent 分别运行在服务账户与目标用户上下文中，各自拥有进程生命周期，通过本机 IPC 协作。测试与 NUKE 项目承担验证和开发控制职责。
+首期断线持续性以 Server 与后端 SSH 连接存活为条件。Server 崩溃或内网 SSH 断开会失去该 SSH 终端；要跨越这一边界，未来需要目标机器上独立的会话持有者。画面恢复还需要持续消费 VT 输出、保持容量上限并生成一致的快照。
 
-## 生命周期和信任边界
+## 已有框架
 
-authentik 身份、broker 连接、系统登录上下文、工作区和终端拥有独立标识。客户端的系统用户名是授权请求；最终账户由服务端映射规则确定。
-
-代理 IPC 需要验证对端的系统身份、目标用户、host 实例和协议版本。Windows 使用命名管道 ACL，Linux 使用 socket 文件权限与对端凭据。代理仅接受经验证的 broker 指令。
-
-broker 使用服务账户运行。Windows 用户代理通过目标用户登录启动；Linux 启动组件负责完成组、用户和会话设置后交给用户代理。系统身份切换保持在明确的本机接口中。
-
-首期 broker 进程生命周期是连接控制状态的边界。用户代理在 WebSocket 断开时持续存在；broker 重启后的代理重新登记、归属恢复与控制权版本同步需要完成集成验收。
-
-## 终端契约
-
-`IPtySessionFactory` 在已建立的用户上下文中启动终端。`IPtySession` 提供输入、输出、尺寸变更、退出状态和显式终止。工作区管理器拥有会话，传输关闭只解除附着。
-
-代理持续消费输出，维护有容量上限的历史和终端状态。快照与输出序列号形成重连边界，输出积压策略由协议规定。
+`SshWorkspaceManager` 为每个工作区建立一份 `WorkspaceConnectionGate`，以不可伪造的 lease 和递增 generation 仲裁接管，并在同一临界区校验输入入队。认证、授权与账户映射完成后才可调用该核心。Data/ 已实现 PostgreSQL 管理模型与迁移，Authentication/SshAccessResolver 通过一次 LINQ 查询解析授权和目标信任配置，见[数据库](database.md)。当前已有 OIDC、内部 SSH 和 WebSocket 的首版集成；托管密钥的真实 SSH 连接与正式端到端环境验收仍待完成，见[交付状态](implementation-status.md)。

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>charac</AssemblyName>
+    <RootNamespace>Charac.Client</RootNamespace>
+    <RuntimeIdentifiers>win-x64;win-arm64;linux-x64;linux-arm64;linux-bionic-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="WorkspaceAccessServer.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets/Fonts/*.woff2" LogicalName="Charac.Fonts.%(Filename)%(Extension)" />
+    <None Update="Assets/Fonts/IBM-Plex-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

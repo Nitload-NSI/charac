@@ -18,6 +18,8 @@ jobs:
             runtime: win-x64
           - os: ubuntu-latest
             runtime: linux-x64
+          - os: ubuntu-latest
+            runtime: linux-bionic-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -36,5 +38,37 @@ jobs:
         if: always()
         with:
           name: test-results-${{ matrix.runtime }}
+          path: artifacts/test-results/
+          if-no-files-found: ignore
+
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: workspace_test
+          POSTGRES_PASSWORD: workspace-test-only
+          POSTGRES_DB: workspace_access_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U workspace_test -d workspace_access_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      WORKSPACE_ACCESS_TEST_DATABASE: Host=127.0.0.1;Port=5432;Database=workspace_access_test;Username=workspace_test;Password=workspace-test-only;Timeout=5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Verify with PostgreSQL 18
+        run: bash ./build.sh --target Verify --locked-restore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-postgres
           path: artifacts/test-results/
           if-no-files-found: ignore

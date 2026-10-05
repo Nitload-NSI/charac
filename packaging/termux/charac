@@ -1,0 +1,2 @@
+#!/data/data/com.termux/files/usr/bin/sh
+exec /data/data/com.termux/files/usr/bin/dotnet /data/data/com.termux/files/usr/opt/charac/charac.dll "$@"

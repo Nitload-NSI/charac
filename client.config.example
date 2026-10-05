@@ -1,0 +1,3 @@
+; User-level Client configuration. No token or SSH key belongs here.
+[client]
+server=https://access.example.com

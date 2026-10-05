@@ -8,3 +8,7 @@ artifacts/
 *.suo
 appsettings.Local.json
 .env
+/workspace-access.config
+temp/
+/ssh_key/
+/.cr/

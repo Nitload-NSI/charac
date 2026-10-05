@@ -6,16 +6,22 @@
 - [组件架构](architecture.md)
 - [身份认证和授权](authentication.md)
 - [连接与会话协议](connection-protocol.md)
+- [Client 与 Server 单域名入口](client-server-transport.md)
+- [Server SSH 会话设计](ssh-session.md)
+- [PostgreSQL 管理数据](database.md)
 - [交付状态](implementation-status.md)
 
 ## 平台专题
 
-总功能描述中的差异表链接到每项差异的独立文档，覆盖服务宿主、用户环境、PTY、进程权限、生命周期、文件存储、系统管理和发布部署。
+- [Android CLI 客户端](platforms/android-client.md)
+
+总功能描述中的差异表链接到每项差异的独立文档，覆盖服务宿主、用户环境、SSH 终端、进程权限、生命周期、文件存储、系统管理和发布部署。
 
 ## 开发与运行
 
 - [开发与构建](development.md)
 - [验证与验收](testing.md)
+- [CLI 唤起 authentik Playground](../demo/oidc-cli/README.md)
 - [Windows 部署模板](../deploy/windows/README.md)
 - [Linux 部署模板](../deploy/linux/README.md)
 

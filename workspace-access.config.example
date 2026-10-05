@@ -1,0 +1,44 @@
+; Copy to workspace-access.config in the repository root for local development.
+; Keep the editable file private. Deployment may place it next to the server executable.
+[server]
+domain=127.0.0.1
+listen=http://127.0.0.1:5080
+; If Caddy is the direct peer, set its numeric IP to trust one X-Forwarded-For hop.
+; trusted_proxy=127.0.0.1
+
+; Fill these only after creating a public PKCE OAuth2/OpenID provider in authentik.
+; [oidc]
+; issuer=https://auth.example.com/application/o/workspace-access/
+; client_id=<authentik-client-id>
+; discovery_url=https://auth.example.com/application/o/workspace-access/.well-known/openid-configuration
+; Optional: the OIDC CLI playground uses this URL to call Server /identity.
+; server_url=http://127.0.0.1:5080
+
+; Local same-service-account control channel. Enable user disconnection only for an isolated service account.
+; [management]
+; allow_disconnect=false
+
+[database]
+host=127.0.0.1
+port=5432
+name=workspace_access
+username=workspace_access
+password=<database-password>
+timeout=5
+maximum_pool_size=100
+
+; Optional legacy local diagnostics only; formal Server operation does not use this section.
+; [ssh_probe]
+; address=10.10.0.101
+; port=22
+; account=youmuliu
+; host_public_key="ssh-ed25519 AAAA..."
+
+; Put private keys in a service-owned directory; no .pub sidecar is required.
+; Register only a file name in PostgreSQL; never store the private key there.
+; [ssh_keys]
+; directory=/var/lib/charac/keys
+
+[Logging:LogLevel]
+Default=Information
+Microsoft.AspNetCore=Warning

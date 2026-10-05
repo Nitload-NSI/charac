@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Charac.Client</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <Using Include="Microsoft.Extensions.Configuration" />
+    <Compile Include="../../src/client/OidcLogin.cs" Link="OidcLogin.cs" />
+    <Compile Include="../../src/server/Authentication/OidcSettings.cs" Link="OidcSettings.cs" />
+    <Compile Include="../../src/server/Hosting/WorkspaceAccessConfiguration.cs" Link="WorkspaceAccessConfiguration.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../src/client/Assets/Fonts/*.woff2" LogicalName="Charac.Fonts.%(Filename)%(Extension)" />
+    <None Include="../../src/client/Assets/Fonts/IBM-Plex-LICENSE.txt" Link="Assets/Fonts/IBM-Plex-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

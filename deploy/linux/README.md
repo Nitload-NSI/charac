@@ -1,32 +1,16 @@
-# Linux 部署模板
+# Linux Server 部署模板
 
-当前产物用于服务宿主与用户代理框架验证。远程工作区各组件的状态由 readiness 报告。
+执行 bash ./build.sh --target Publish --runtime linux-x64，将 artifacts/publish/linux-x64/server/ 安装到 /opt/workspace-access；ARM64 使用 linux-arm64。创建受限的 workspace-access 服务账户，安装 deploy/linux/workspace-access-server.service 并按本机路径调整。目标 Linux 主机单独部署 sshd，限制为内网访问。
 
-## 发布
-
-执行 `bash ./build.sh --target Publish --runtime linux-x64`。将发布目录整体部署到 `/opt/workspace-access/`。ARM64 使用 `linux-arm64`。服务与用户代理共用同一程序，通过 `host`、`agent` 参数选择角色。赋予入口文件执行权限：
-
-```bash
-sudo chmod 0755 /opt/workspace-access/WorkspaceAccessHost
-```
-
-## 系统服务
-
-由部署人员建立 `workspace-access` 系统用户及同名组，并赋予安装目录读取和执行权限。把 `workspace-access-host.service` 复制到 `/etc/systemd/system/` 后执行：
-
-```bash
+```sh
+sudo install -d -m 0750 /opt/workspace-access
+sudo install -m 0755 char_rac_server /opt/workspace-access/char_rac_server
+sudo install -m 0644 workspace-access-server.service /etc/systemd/system/workspace-access-server.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now workspace-access-host.service
-systemctl status workspace-access-host.service
-journalctl -u workspace-access-host.service
+sudo systemctl enable --now workspace-access-server
+sudo systemctl status workspace-access-server
 ```
 
-模板使用低权限 broker 账户，运行目录为 `/run/workspace-access`，状态目录为 `/var/lib/workspace-access`。用户上下文启动组件按专门权限边界接入。HTTP 健康端点位于 `127.0.0.1:5080`。
+其余发布文件和运行时依赖也必须部署到同一目录。目标主机密钥、账户权限与网络策略需要另行配置；改用证书登录时再配置 SSH CA 信任。密码与私钥 SSH Broker、OIDC、Session Manager 和 WebSocket 已接入；`/health/ready` 在剩余验收项完成前仍返回 503。可在 systemd 的 `ExecStart` 末尾添加 `--config /etc/workspace-access/workspace-access.config`，由服务账户读取该文件，无需复制到发布目录。
 
-## 用户代理
-
-`workspace-access-agent.service` 为 systemd user unit。以目标用户身份将其放入 `~/.config/systemd/user/`，通过 `systemctl --user daemon-reload` 和 `systemctl --user enable --now workspace-access-agent.service` 启动。用户管理器随登录和 linger 策略运行，部署时明确相应生命周期。
-
-此模板用于验证现有用户上下文中的 Agent 入口；完整的按需账户启动流程在用户启动组件中实现。
-
-源仓库设计文档：`docs/platforms/user-environment.md`、`docs/platforms/session-lifecycle.md`、`docs/implementation-status.md`。
+本机管理通道只允许服务账户连接。服务启动后，可用相同的 `--config` 路径执行 `status` 和 `reload`，例如 `sudo -u workspace-access /opt/workspace-access/char_rac_server --config /etc/workspace-access/workspace-access.config status`。`reload` 目前只在线应用 `[Logging]`；其他配置变化需要计划性重启。服务单元没有 `PrivateTmp`，因为 .NET 在 Linux 上通过 `/tmp` 中的 Unix 域套接字实现命名管道；`UMask=0077` 与同账户检查限制本地访问。

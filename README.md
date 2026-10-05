@@ -1,73 +1,41 @@
-# Workspace Access Host
+# Workspace Access
 
-面向 Windows 和 Linux 的持久终端工作区服务，使用 C# / .NET 10 开发，使用 NUKE 统一构建、测试、文档校验和发布。
+面向 Windows 和 Linux 目标的远程 SSH 工作区管理服务，使用 .NET 10 开发；CLI 客户端另支持 Android ARM64 的 Termux 终端发布。服务端与 CLI 客户端分别位于 `src/server/` 和 `src/client/`。
 
-产品设计：通过 authentik OIDC 认证后，经 WebSocket 连接宿主上的用户终端。每台宿主拥有一个有效远程控制连接，终端进程在连接断开期间持续运行。
+## 目标架构
 
-## 当前交付
+客户端通过 authentik OIDC 登录，经 HTTPS/WebSocket 连接 Server。Server 校验身份与目标系统账户映射，使用后端 SSH 凭据连接内网 Windows 或 Linux 的 `sshd`。Session Manager 持有每个工作区的 SSH 连接，客户端断线只解除附着；Server 持续消费输出，同一身份重连时重新附着。Windows OpenSSH 负责 ConPTY 和用户 Shell，Linux OpenSSH 负责 POSIX PTY。
 
-当前处于框架阶段。已提供服务与用户代理入口、平台契约、单连接控制核心及测试、部署模板和文档库。OIDC、WebSocket、代理 IPC、ConPTY / POSIX PTY 和画面恢复处于待实现阶段。服务启动后，存活检查返回 200，就绪检查返回 503 并列出集成项。
+SSH CA 是后端凭据的可选方案；正式用户登录使用 OIDC。首期工作区在 Server 与后端 SSH 连接存活期间持续运行；Server 重启或后端 SSH 断线后的恢复另行验收。
 
-## 快速开始
+## 当前状态
 
-安装 [global.json](global.json) 指定的 .NET SDK，在仓库根目录执行：
+当前已实现 Server 服务入口、EF Core/PostgreSQL 授权、OIDC 令牌校验、密码 SSH Broker、Session Manager 与 WebSocket；Client 提供 `login` 登录验证及 `connect` 的资源选择、交互创建/重新附着。demo 的真实 authentik PKCE 登录已通过，正式 Client 登录和 Server 验签已实测通过，资源选择 → SSH 整链路仍待验收，托管后端 SSH 凭据、自动重连和画面恢复待完善。`/health/live` 返回 200，`/health/ready` 返回 503，检查真实数据库状态并列出待集成项，数据库配置与迁移见[数据库文档](docs/database.md)。
+
+## 构建与运行
+
+安装 .NET 10 或更高稳定版 SDK，在仓库根目录运行：
 
 ```powershell
-# Windows PowerShell
 ./build.ps1 --target Verify
-./build.ps1 --target RunHost
-```
-
-```bash
-# Linux
-bash ./build.sh --target Verify
-bash ./build.sh --target RunHost
-```
-
-宿主默认监听 `http://127.0.0.1:5080`，健康检查为 `/health/live` 与 `/health/ready`。用户代理入口为 `RunAgent`。使用 Ctrl+C 结束前台开发进程。
-
-发布目标平台的独立运行产物：
-
-```powershell
+./build.ps1 --target RunServer
+dotnet run --project src/client -- status --server http://127.0.0.1:5080
+dotnet run --project src/client -- login --server http://127.0.0.1:5080
+dotnet run --project src/client -- connect --server http://127.0.0.1:5080
 ./build.ps1 --target Publish --runtime win-x64
-./build.ps1 --target Publish --runtime linux-x64
 ```
 
-产物位于 `artifacts/publish/<runtime>/`，包含 `WorkspaceAccessHost` 程序、运行时依赖、配置和 `deploy/` 部署模板。同一程序通过参数选择角色：
-
-```text
-WorkspaceAccessHost host
-WorkspaceAccessHost agent
-```
-
-Windows 使用 `WorkspaceAccessHost.exe`。两个角色在各自的进程和系统用户上下文中运行。
-
-## 阅读入口
-
-- [文档库](docs/README.md)
-- [总功能与平台差异表](docs/overview.md)
-- [架构与项目职责](docs/architecture.md)
-- [开发与 NUKE 构建](docs/development.md)
-- [交付状态与后续实现](docs/implementation-status.md)
-- [贡献指南](CONTRIBUTING.md)
-- [仓库开发约定](AGENTS.md)
+Android 客户端可用 `./build.ps1 --target Publish --runtime linux-bionic-arm64` 发布，详见[Android CLI](docs/platforms/android-client.md)。Linux 使用 `bash ./build.sh`。Server 使用 INI 配置域名和监听地址；开发时读取仓库根目录的 `workspace-access.config`，发布时用 `--config <路径>` 指向独立配置文件。构建中间文件与二进制统一位于根目录 `temp/<项目名>/`。Windows/Linux 发布产物分别位于 `artifacts/publish/<runtime>/server/` 与 `client/`；Android/Termux 仅发布 `client/`。
 
 ## 目录
 
 ```text
-src/                            单一产品项目
-  WorkspaceAccessHost.csproj     产品项目文件
-  Program.cs                    角色选择入口
-  Core/                         共享模型与契约
-  Authentication/               外部身份与认证
-  Connections/                  连接归属与控制权
-  Terminals/                    PTY 契约与终端逻辑
-  Platforms/Windows/            Windows 适配
-  Platforms/Linux/              Linux 适配
-  Hosting/                      服务宿主角色
-  Agent/                        用户代理角色
-tests/WorkspaceAccessHost.Tests/ 测试项目
-build/                          NUKE 构建项目
-docs/                           产品、架构、平台差异及开发文档
-deploy/                         Windows Service 与 systemd 部署模板
+src/server/                      Server 项目与连接仲裁
+src/client/                      CLI 客户端项目
+tests/WorkspaceAccessServer.Tests/ 核心测试
+build/                           NUKE 构建
+docs/                            设计、状态与验收文档
+deploy/                          Windows Service 与 systemd 模板
 ```
+
+阅读[文档库](docs/README.md)、[单域名通信入口](docs/client-server-transport.md)、[架构](docs/architecture.md)、[交付状态](docs/implementation-status.md)和[贡献指南](CONTRIBUTING.md)。

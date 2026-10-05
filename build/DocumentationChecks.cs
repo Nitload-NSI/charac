@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using Serilog;
 
-namespace WorkspaceAccess.Build;
+namespace Charac.Build;
 
 internal static partial class DocumentationChecks
 {

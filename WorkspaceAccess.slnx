@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/build/">
+    <Project Path="build/Build.csproj" />
+  </Folder>
+  <Folder Name="/src/server/">
+    <Project Path="src/server/WorkspaceAccessServer.csproj" />
+  </Folder>
+  <Folder Name="/src/client/">
+    <Project Path="src/client/WorkspaceAccessClient.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WorkspaceAccessServer.Tests/WorkspaceAccessServer.Tests.csproj" />
+  </Folder>
+</Solution>

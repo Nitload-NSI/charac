@@ -1,0 +1,28 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Charac Client" Manufacturer="nitload" Version="$(var.PackageVersion)"
+           UpgradeCode="0F2E0762-42F8-431B-BA94-B8BD63B0C103" Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer Charac Client is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="CompanyFolder" Name="nitload">
+        <Directory Id="INSTALLFOLDER" Name="Charac Client" />
+      </Directory>
+    </StandardDirectory>
+    <Component Id="ClientPath" Directory="INSTALLFOLDER" Guid="*">
+      <Environment Id="ClientPathEnvironment" Name="PATH" Action="set" Part="last"
+                   System="yes" Value="[INSTALLFOLDER]" />
+      <RegistryValue Root="HKLM" Key="Software\nitload\Charac\Client" Name="InstallPath"
+                     Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+    </Component>
+    <Component Id="ClientConfigTemplate" Directory="INSTALLFOLDER" Guid="*">
+      <File Id="ClientConfigTemplateFile" Source="$(var.ConfigTemplatePath)" KeyPath="yes" />
+    </Component>
+    <Feature Id="Complete" Title="Charac Client" Level="1">
+      <Files Directory="INSTALLFOLDER" Include="$(var.PayloadDir)\**">
+        <Exclude Files="$(var.PayloadDir)\**.pdb" />
+      </Files>
+      <ComponentRef Id="ClientPath" />
+      <ComponentRef Id="ClientConfigTemplate" />
+    </Feature>
+  </Package>
+</Wix>

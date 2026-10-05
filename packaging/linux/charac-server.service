@@ -1,0 +1,25 @@
+[Unit]
+Description=Charac Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=charac
+Group=charac
+WorkingDirectory=/opt/charac/server
+ExecStart=/opt/charac/server/char_rac_server --config /etc/charac/workspace-access.config
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+RuntimeDirectory=charac
+RuntimeDirectoryMode=0700
+StateDirectory=charac
+StateDirectoryMode=0700
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

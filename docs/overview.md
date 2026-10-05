@@ -2,41 +2,39 @@
 
 ## 产品目标
 
-Workspace Access Host 提供持续存在的字符终端工作区。用户完成 authentik OIDC 认证后，以已授权的系统用户身份访问 shell 与 TUI 程序。Windows 和 Linux 共享连接、授权和工作区模型，通过平台适配实现系统服务、用户执行上下文与伪终端。
+Workspace Access Server 管理 Windows 与 Linux 上的远程 SSH 工作区。外部用户经 authentik OIDC 登录；Server 按经过验证的外部身份授权目标机器和系统账户，连接只在内网可达的 OpenSSH Server。对外接口为 HTTPS/WebSocket，客户端不直接接触目标 `sshd`。
 
-产品使用单一 C# 项目，内部按目录组织架构。发布程序通过 `host` 和 `agent` 参数分别运行系统服务与用户代理角色，共享一套部署产物。
+Windows OpenSSH 提供 ConPTY 与用户 Shell，Linux OpenSSH 提供 POSIX PTY 与用户 Shell。Server 负责 SSH 信任、连接控制、工作区归属与输出保持，不自行实现平台 PTY 或用户代理。
 
-## 功能
+## 功能与边界
 
-| 功能 | 当前设计 |
+| 功能 | 目标行为 |
 | --- | --- |
-| 身份来源 | authentik 管理外部身份，操作系统管理系统账户 |
-| 身份关联 | 以 `(issuer, subject)` 标识外部身份，管理员配置系统账户映射与 host 访问规则 |
-| 远程连接 | 客户端经 WSS 连接 broker，控制与终端数据按协议传输 |
-| 连接独占 | 每个 host 一个有效远程连接；同身份显式接管时撤销旧控制权 |
-| 工作区归属 | 归属独立于连接存在；断线后原身份可重新附着 |
-| 终端持久性 | 用户代理持有 PTY 与进程，连接断开期间继续运行和读取输出 |
-| 画面恢复 | 按终端状态快照与有序输出恢复光标、屏幕及滚动历史 |
-| 输入控制 | 输入、终端缩放及会话变更均校验当前连接控制权 |
-| 文件访问 | 遵循执行账户及实际存储后端权限；并行编辑使用独立工作目录 |
-| 数据保存 | 应用负责文件保存，代理保存运行期间的终端状态；系统启动后建立新的运行会话 |
-| 审计 | 记录认证结果、映射、连接获取、接管和会话结束等事件 |
+| 身份 | authentik 负责 OIDC；操作系统负责系统账户与文件权限 |
+| 映射 | 以 `(issuer, subject)` 标识外部身份，管理员授权目标机器和系统账户 |
+| SSH 信任 | Server 管理后端 SSH 凭据并校验目标主机密钥；SSH CA 是可选实现方式 |
+| 外部传输 | CLI 经 HTTPS 登录、经 WebSocket 附着工作区 |
+| Android 客户端 | ARM64/Termux CLI 发布；设备运行和交互能力待验收，见[Android CLI](platforms/android-client.md) |
+| 工作区 | Session Manager 按工作区持有后端 SSH 连接，可管理多个工作区 |
+| 控制权 | 每个工作区只有一个有效远程控制者；同身份可显式接管 |
+| 断线 | 外部 WebSocket 断开只解除附着；Server 继续读取后端输出 |
+| 恢复 | 同身份重新授权后附着，按终端状态与有序输出恢复画面 |
+| 生命周期 | 首期持久性以 Server 进程和后端 SSH 连接存活为前提 |
+| 审计 | 记录认证、映射、SSH 凭据、接管、连接及工作区结束事件 |
+
+后端 SSH 凭据只解决 Server 到 sshd 的认证，不负责工作区持久性。Server 重启或后端 SSH 断线后的原会话恢复不属于首期保证。
 
 ## 平台差异
 
 | 项目 | Windows | Linux | 详细说明 |
 | --- | --- | --- | --- |
-| 服务宿主与 IPC | Windows Service、命名管道 | systemd、Unix domain socket | [服务宿主](platforms/service-hosting.md) |
-| 用户环境来源 | 目标用户已登录时启动用户代理，关联 SID | 为现有系统账户建立 UID/GID 用户上下文 | [用户环境](platforms/user-environment.md) |
-| 伪终端 | ConPTY 与 Windows 进程 API | POSIX PTY、控制终端与进程组 | [终端后端](platforms/terminal-backend.md) |
-| 权限与进程边界 | Windows 访问令牌、对象 ACL、Job Object | UID/GID、文件权限、cgroup 和进程组 | [权限与进程](platforms/process-security.md) |
-| 用户会话生命周期 | 跟随用户登录会话，锁屏期间保持工作区 | 跟随用户会话宿主与服务策略运行 | [生命周期](platforms/session-lifecycle.md) |
-| 文件系统与共享目录 | NTFS 或 VirtioFS；验证 SID 与宿主权限映射 | 原生文件系统或挂载目录；验证 UID/GID 与锁行为 | [存储访问](platforms/storage.md) |
-| 系统管理权限 | Windows 用户权限分配和提升策略 | sudo、polkit 与服务权限策略 | [系统管理](platforms/system-control.md) |
-| 发布与注册 | Windows RID、SCM 注册和用户登录启动 | Linux RID、systemd system/user unit | [发布部署](platforms/deployment.md) |
+| 服务宿主与 SSH | Windows Service、Windows OpenSSH | systemd、OpenSSH | [服务宿主](platforms/service-hosting.md) |
+| 用户环境 | Windows 账户与 SSH 登录令牌 | UID/GID 与 SSH 登录环境 | [用户环境](platforms/user-environment.md) |
+| 终端后端 | sshd 使用 ConPTY | sshd 使用 POSIX PTY | [终端后端](platforms/terminal-backend.md) |
+| 进程与权限 | Windows 访问令牌、ACL | UID/GID、文件权限 | [权限与进程](platforms/process-security.md) |
+| SSH 会话生命周期 | Windows sshd 与服务策略 | Linux sshd 与服务策略 | [生命周期](platforms/session-lifecycle.md) |
+| 文件系统 | NTFS 或 VirtioFS | 原生文件系统或挂载目录 | [存储访问](platforms/storage.md) |
+| 系统管理 | Windows 用户权限与提升策略 | sudo、polkit | [系统管理](platforms/system-control.md) |
+| 发布部署 | Windows RID、SCM、OpenSSH 配置 | Linux RID、systemd、OpenSSH 配置 | [发布部署](platforms/deployment.md) |
 
-## 使用条件
-
-Windows 标准运行方式是已登录用户代理。宿主进入等待状态后，目标用户登录即可建立代理上下文。部署可以选用专门的本地账户。Linux 的用户上下文由受控启动组件创建。两个平台的首期连接策略均为 host 级独占。
-
-当前代码覆盖范围见[交付状态](implementation-status.md)，验收项见[验证文档](testing.md)。
+当前代码覆盖范围见[交付状态](implementation-status.md)，验收见[验证文档](testing.md)。
