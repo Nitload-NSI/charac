@@ -33,6 +33,9 @@ Server RPM 安装自包含程序到 `/opt/charac/server`，安装 `charac-server
 
 
 Server 运行时只需 `--config /etc/charac/workspace-access.config`。这一个 INI 保存监听地址、OIDC 信息、PostgreSQL 连接参数和 `[ssh_keys] directory`；它不负责启动 PostgreSQL 容器。PostgreSQL 容器及其数据卷应由独立的数据库部署管理，RAC 只使用受限数据库账户连接。`charac` 是非 root 的系统服务账户，`StateDirectory=charac` 负责 `/var/lib/charac`，`/var/lib/charac/keys` 建议设为该账户所有、目录 `0700`、私钥 `0600`。当前没有磁盘会话缓存或单独日志文件：工作区状态留在 Server 内存与数据库历史中，标准日志进入 systemd journal，可用 `journalctl -u charac-server` 查看。无需额外配置 `CacheDirectory` 或 `LogsDirectory`；将来确有持久快照或文件日志时再增加。服务通过高端口监听，由 Caddy 承接 443，无需为网络入口提升 Server 到 root。
+
+服务单元保留 `ProtectSystem=strict`，并用 `ReadWritePaths=/tmp` 允许 .NET 在 `/tmp` 创建本机管理通道的 Unix socket 和 Data Protection 临时文件。不要启用 `PrivateTmp`：管理命令从服务外部以同一个 `charac` 账户连接该 socket，需要看到同一个 `/tmp`。已安装旧 RPM 的机器可先执行 `sudo systemctl edit charac-server`，在 `[Service]` 下添加 `ReadWritePaths=/tmp`，保存后运行 `sudo systemctl daemon-reload && sudo systemctl restart charac-server`；新版 RPM 将直接包含这一设置。
+
 Client RPM 安装自包含程序到 `/opt/charac/client`，并提供 `/usr/bin/charac` 命令。Windows MSI 安装到 `Program Files\nitload\Charac Client`，把安装目录加入系统 `PATH`；新终端可运行 `charac.exe --help`。MSI 内嵌所需文件，不依赖独立 CAB。两个 Client 包均不预置登录令牌或目标配置。
 
 RPM 尚需在目标 Fedora/RHEL 机器进行实际安装、升级、卸载和 systemd 验收；Termux DEB 尚需在真实 Android/Termux 设备上安装、启动和登录验收；MSI 尚需在正常启用 Windows Installer 服务的 Windows 机器进行安装、升级、卸载验收。当前构建环境完成了 RPM 生成及文件头检查、Termux DEB 控制字段和文件路径检查、MSI 生成及文件表反编译检查；受限环境里的 ICE 校验无法连接 Windows Installer 服务。

@@ -12,3 +12,4 @@ appsettings.Local.json
 temp/
 /ssh_key/
 /.cr/
+/coredump*.txt

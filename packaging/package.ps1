@@ -99,10 +99,11 @@ if (-not $NfpmPath) { $NfpmPath = Join-Path $repository 'temp/tools/nfpm/nfpm.ex
 if (-not (Test-Path -LiteralPath $NfpmPath -PathType Leaf)) { throw 'nFPM 2.47.0 is required; pass -NfpmPath.' }
 
 $name = "charac-$kind"
+$release = if ($kind -eq 'server') { '2' } else { '1' }
 $lines = [System.Collections.Generic.List[string]]::new()
 $lines.Add("name: $name")
 $lines.Add("version: $version")
-$lines.Add('release: 1')
+$lines.Add("release: $release")
 $lines.Add('arch: amd64')
 $lines.Add('platform: linux')
 $lines.Add('maintainer: nitload')
@@ -137,7 +138,7 @@ if ($kind -eq 'server') {
 }
 $config = Join-Path $scratch "$name.yaml"
 [IO.File]::WriteAllLines($config, [string[]]$lines)
-$output = Join-Path $packages "${name}-${version}-1.x86_64.rpm"
+$output = Join-Path $packages "${name}-${version}-${release}.x86_64.rpm"
 & $NfpmPath package --config $config --packager rpm --target $output
 if ($LASTEXITCODE -ne 0) { throw "nFPM failed with exit code $LASTEXITCODE." }
 Write-Output $output
