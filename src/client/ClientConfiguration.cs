@@ -40,10 +40,19 @@ internal static class ClientConfiguration
     }
     public static string LoadServer(string? path = null)
     {
-        path = path is null ? (File.Exists(DefaultPath) ? DefaultPath :
-            File.Exists(LegacyPath) ? LegacyPath : DefaultPath) : Path.GetFullPath(path);
+        if (path is null)
+        {
+            path = File.Exists(DefaultPath) ? DefaultPath :
+                File.Exists(LegacyPath) ? LegacyPath : DefaultPath;
+            if (path == DefaultPath)
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        }
+        else
+        {
+            path = Path.GetFullPath(path);
+        }
         if (!File.Exists(path))
-            throw new InvalidOperationException($"Client configuration not found: {path}. Create [client] server=https://your-server or pass --server.");
+            throw new InvalidOperationException($"Client configuration not found: {path}. The parent directory has been created; add [client] server=https://your-server or pass --server.");
 
         string? section = null;
         string? server = null;

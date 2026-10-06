@@ -1,5 +1,7 @@
 # Android CLI 客户端
 
+推荐把 Android CLI 作为 Termux DEB 分发，而不是把 CLI 当成普通 Android APK。APK 只是可选的 One UI 启动器：它不能单独运行 CLI，必须与 Termux、Termux DEB、运行命令权限和 `allow-external-apps=true` 配置一起使用。直接安装 APK 后点击图标不能替代 Termux 环境，也不会自动安装 .NET 或 `charac`。
+
 Android 首期支持 ARM64 设备上的 Termux 终端，CLI 使用 `linux-bionic-arm64` RID。另有独立的 .NET Android 启动器项目 `src/android/CharacAndroid.csproj`，包 ID 为 `com.nitload.charac`；Server 仍只部署在 Windows 或 Linux。
 
 执行 `./build.ps1 --target Publish --runtime linux-bionic-arm64 --locked-restore`，或在 Linux 上使用 `bash ./build.sh`。随后运行 `./packaging/package.ps1 -Target ClientTermuxDeb`，生成 `artifacts/packages/charac_0.1.0-1_aarch64.deb`。该包面向标准包名 `com.termux` 的 apt 版 aarch64 Termux，将 Client 安装到 `$PREFIX/opt/charac`，将 `charac` 入口装到 `$PREFIX/bin`，并依赖 Termux 的 `dotnet-runtime-10.0`。在 Termux 中复制 DEB 后运行 `apt install ./charac_0.1.0-1_aarch64.deb`；当前尚未发布到 Termux 仓库，因此 `pkg install charac` 还不能从公共仓库下载它。APK 的环境检查会识别包提供的固定入口。

@@ -14,6 +14,17 @@ internal static class Program
             configPath = args[1];
             args = args[2..];
         }
+        if (args.Length >= 2 &&
+            args[0] is "status" or "login" or "whoami" or "connect" or "run" or "attach" &&
+            !args.Contains("--server", StringComparer.Ordinal) &&
+            !args[1].StartsWith("--", StringComparison.Ordinal))
+        {
+            var candidate = args[1].Contains("://", StringComparison.Ordinal)
+                ? args[1]
+                : "https://" + args[1];
+            if (TryGetServerUri(candidate, out _))
+                args = [args[0], "--server", candidate, .. args[2..]];
+        }
         if (args.Length == 0 || args is ["--help"] or ["-h"])
         {
             PrintUsage();
