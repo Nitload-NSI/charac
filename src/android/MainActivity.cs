@@ -57,6 +57,24 @@ public sealed class MainActivity : Activity
 
     private void HandleBrokerIntent(Intent intent)
     {
+        var brokerUri = intent.Data;
+        if (brokerUri?.Scheme == "com.nitload.charac" && brokerUri.Host == "oauth" &&
+            brokerUri.Path == "/start")
+        {
+            var brokerAuthorizationUrl = brokerUri.GetQueryParameter("url");
+            var portText = brokerUri.GetQueryParameter("port");
+            if (brokerAuthorizationUrl is null || !Uri.TryCreate(brokerAuthorizationUrl, UriKind.Absolute, out var parsedUrl) ||
+                parsedUrl.Scheme != Uri.UriSchemeHttps || !int.TryParse(portText, out var port) ||
+                port is <= 0 or > 65535)
+            {
+                SetStatus("OIDC 启动参数无效。请从 Termux 重新发起登录。", false);
+                return;
+            }
+
+            StartBrowserForAuthorization(parsedUrl, port);
+            return;
+        }
+
         if (intent.GetStringExtra(AuthUrlExtra) is { Length: > 0 } authorizationUrl)
         {
             var port = intent.GetIntExtra(CallbackPortExtra, 0);
@@ -85,15 +103,11 @@ public sealed class MainActivity : Activity
                 return;
             }
             updatedEditor.Apply();
-            try
-            {
-                StartActivity(new Intent(Intent.ActionView, global::Android.Net.Uri.Parse(authorizationUrl)));
-                SetStatus("已打开浏览器。完成登录后将自动返回 Termux。", false);
-            }
-            catch (Exception exception)
-            {
-                SetStatus("无法打开浏览器：" + exception.Message, false);
-            }
+            if (Uri.TryCreate(authorizationUrl, UriKind.Absolute, out var parsedUrl) &&
+                parsedUrl.Scheme == Uri.UriSchemeHttps)
+                StartBrowserForAuthorization(parsedUrl, port);
+            else
+                SetStatus("OIDC 授权地址无效。请从 Termux 重新发起登录。", false);
             return;
         }
 
@@ -119,6 +133,33 @@ public sealed class MainActivity : Activity
         ], true);
         if (StartTermux(command))
             SetStatus("登录回调已交给 Termux。请返回终端等待完成。", true);
+    }
+
+    private void StartBrowserForAuthorization(Uri authorizationUrl, int port)
+    {
+        var preferences = GetPreferences(FileCreationMode.Private);
+        var editor = preferences?.Edit();
+        if (editor is null)
+        {
+            SetStatus("无法保存 OIDC 回调状态。请从 Termux 重新发起登录。", false);
+            return;
+        }
+        var updatedEditor = editor.PutInt(CallbackPortPreference, port);
+        if (updatedEditor is null)
+        {
+            SetStatus("无法保存 OIDC 回调状态。请从 Termux 重新发起登录。", false);
+            return;
+        }
+        updatedEditor.Apply();
+        try
+        {
+            StartActivity(new Intent(Intent.ActionView, global::Android.Net.Uri.Parse(authorizationUrl.ToString())));
+            SetStatus("已打开浏览器。完成登录后将自动返回 Termux。", false);
+        }
+        catch (Exception exception)
+        {
+            SetStatus("无法打开浏览器：" + exception.Message, false);
+        }
     }
 
     private bool HasTermux()

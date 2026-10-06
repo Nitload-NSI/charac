@@ -9,6 +9,8 @@ namespace Charac.Client;
 
 internal static class OidcLogin
 {
+    private const string TermuxBin = "/data/data/com.termux/files/usr/bin";
+
     public static async Task<string> LoginAsync(HttpClient client, string issuer, string clientId,
         string discoveryUrl,
         CancellationToken cancellationToken = default)
@@ -106,22 +108,18 @@ internal static class OidcLogin
     {
         try
         {
-            var start = new ProcessStartInfo("/system/bin/am") { UseShellExecute = false };
-            start.ArgumentList.Add("start");
-            start.ArgumentList.Add("-n");
-            start.ArgumentList.Add("com.nitload.charac/.MainActivity");
-            start.ArgumentList.Add("--es");
-            start.ArgumentList.Add("charac_auth_url");
-            start.ArgumentList.Add(authorizationUri.ToString());
-            start.ArgumentList.Add("--ei");
-            start.ArgumentList.Add("charac_callback_port");
-            start.ArgumentList.Add(port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            var brokerUri = new UriBuilder("com.nitload.charac://oauth/start")
+            {
+                Query = $"url={Uri.EscapeDataString(authorizationUri.ToString())}&port={port.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+            }.Uri;
+            var start = new ProcessStartInfo(TermuxBin + "/termux-open-url") { UseShellExecute = false };
+            start.ArgumentList.Add(brokerUri.ToString());
             using var process = Process.Start(start);
             process?.WaitForExit(5000);
             if (process is null || process.ExitCode != 0)
-                throw new InvalidOperationException("Android callback broker did not start.");
+                throw new InvalidOperationException("Termux could not open the Android callback broker.");
         }
-        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException or System.IO.IOException)
         {
             Console.WriteLine($"Could not start the Android callback broker: {exception.Message}");
             Console.WriteLine("Open the URL manually in a browser on this device.");

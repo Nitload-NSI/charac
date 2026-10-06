@@ -1,6 +1,6 @@
 # Android CLI 客户端
 
-Termux 登录不让浏览器直接访问 Termux 的 `127.0.0.1`：CLI 通过 `/system/bin/am` 启动 APK，APK 注册 `com.nitload.charac://oauth/callback` 并接收 authentik 回调，再用 `RUN_COMMAND` 调用 `charac callback` 将授权码转回 CLI 的本地监听器。
+Termux 登录不让浏览器直接访问 Termux 的 `127.0.0.1`：CLI 通过 `termux-open-url` 启动 APK，APK 注册 `com.nitload.charac://oauth/callback` 并接收 authentik 回调，再用 `RUN_COMMAND` 调用 `charac callback` 将授权码转回 CLI 的本地监听器。
 
 推荐把 Android CLI 作为 Termux DEB 分发，而不是把 CLI 当成普通 Android APK。APK 只是可选的 One UI 启动器：它不能单独运行 CLI，必须与 Termux、Termux DEB、运行命令权限和 `allow-external-apps=true` 配置一起使用。直接安装 APK 后点击图标不能替代 Termux 环境，也不会自动安装 .NET 或 `charac`。
 
