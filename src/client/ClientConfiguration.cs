@@ -38,7 +38,7 @@ internal static class ClientConfiguration
                 ".config", "char-rac", "client.config");
         }
     }
-    public static string LoadServer(string? path = null)
+    public static string LoadServer(string? path = null, bool promptForServer = false)
     {
         if (path is null)
         {
@@ -52,7 +52,21 @@ internal static class ClientConfiguration
             path = Path.GetFullPath(path);
         }
         if (!File.Exists(path))
-            throw new InvalidOperationException($"Client configuration not found: {path}. The parent directory has been created; add [client] server=https://your-server or pass --server.");
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, Template);
+            if (promptForServer && !Console.IsInputRedirected)
+            {
+                Console.Write("Default Server (press Enter to leave empty): ");
+                var input = Console.ReadLine()?.Trim();
+                if (!string.IsNullOrEmpty(input))
+                {
+                    SetDefaultServer(path, input);
+                    return LoadServer(path);
+                }
+            }
+            throw new InvalidOperationException($"Client configuration created: {path}. Add [client] server=https://your-server or pass --server.");
+        }
 
         string? section = null;
         string? server = null;
@@ -77,7 +91,20 @@ internal static class ClientConfiguration
             server = line[(equals + 1)..].Trim().Trim('"');
         }
         if (server is null || !Program.TryGetServerUri(server, out var uri))
-            throw new InvalidOperationException($"[client] server must be an HTTPS origin (HTTP only for loopback): {path}.");
+            throw new InvalidOperationException($"[client] server is missing or invalid in {path}. Enter a server manually with 'charac connect <server>' or '--server <server>'.");
         return uri.ToString();
     }
+
+    public static string SetDefaultServer(string? path, string server)
+    {
+        if (!Program.TryGetServerUri(server, out var uri))
+            throw new InvalidOperationException("Server must be an HTTPS origin (HTTP is allowed only for loopback).");
+
+        path = path is null ? DefaultPath : Path.GetFullPath(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, $"; Charac client configuration\n; The server is an HTTPS origin.\n[client]\nserver={uri}\n");
+        return path;
+    }
+
+    private const string Template = "; Charac client configuration\n; Add an HTTPS origin after server=, or use charac config --default-server <server>.\n[client]\nserver=\n";
 }

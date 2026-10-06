@@ -30,12 +30,26 @@ internal static class Program
             PrintUsage();
             return 0;
         }
+        if (args is ["config", "--default-server", var defaultServer])
+        {
+            try
+            {
+                var path = ClientConfiguration.SetDefaultServer(configPath, defaultServer);
+                Console.WriteLine($"Client default server saved: {path}");
+                return 0;
+            }
+            catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                Console.Error.WriteLine(exception.Message);
+                return 2;
+            }
+        }
         if (args[0] is "status" or "login" or "whoami" or "connect" or "run" or "attach" or "probe-session" or "shell" &&
             !args.Contains("--server", StringComparer.Ordinal))
         {
             try
             {
-                var origin = ClientConfiguration.LoadServer(configPath);
+                var origin = ClientConfiguration.LoadServer(configPath, promptForServer: true);
                 args = [args[0], "--server", origin, .. args[1..]];
             }
             catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException)
@@ -156,6 +170,7 @@ internal static class Program
     {
         output ??= Console.Out;
         output.WriteLine("Usage: charac [--config <client.config>] status [--server https://access.example.com]");
+        output.WriteLine("       charac config --default-server https://access.example.com");
         output.WriteLine("       charac login --server https://access.example.com");
         output.WriteLine("       charac connect [--server https://access.example.com]");
         output.WriteLine("       charac connect [--server https://access.example.com] --target <target-id>");

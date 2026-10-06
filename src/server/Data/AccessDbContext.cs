@@ -12,6 +12,8 @@ internal sealed class AccessDbContext(DbContextOptions<AccessDbContext> options)
     public DbSet<SshLoginKey> LoginKeys => Set<SshLoginKey>();
     public DbSet<WorkspaceRecord> WorkspaceRecords => Set<WorkspaceRecord>();
     public DbSet<AccessGrant> Grants => Set<AccessGrant>();
+    public DbSet<PreRegisteredGrant> PreRegisteredGrants => Set<PreRegisteredGrant>();
+    public DbSet<SshEndpointAccount> EndpointAccounts => Set<SshEndpointAccount>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -23,7 +25,9 @@ internal sealed class AccessDbContext(DbContextOptions<AccessDbContext> options)
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Issuer).HasMaxLength(512);
             entity.Property(x => x.Subject).HasMaxLength(256);
+            entity.Property(x => x.UserName).HasMaxLength(256);
             entity.HasIndex(x => new { x.Issuer, x.Subject }).IsUnique();
+            entity.HasIndex(x => new { x.Issuer, x.UserName }).IsUnique();
         });
 
         model.Entity<UserCertificateAuthority>(entity =>
@@ -67,6 +71,19 @@ internal sealed class AccessDbContext(DbContextOptions<AccessDbContext> options)
             entity.HasIndex(x => x.FileName).IsUnique();
         });
 
+        model.Entity<SshEndpointAccount>(entity =>
+        {
+            entity.ToTable("endpoint_accounts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Account).HasMaxLength(256);
+            entity.Property(x => x.CertificatePrincipal).HasMaxLength(256);
+            entity.HasIndex(x => new { x.TargetId, x.Account }).IsUnique();
+            entity.HasOne(x => x.Target).WithMany()
+                .HasForeignKey(x => x.TargetId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SshLoginKey).WithMany()
+                .HasForeignKey(x => x.SshLoginKeyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
         model.Entity<WorkspaceRecord>(entity =>
         {
             entity.ToTable("workspace_records");
@@ -85,11 +102,29 @@ internal sealed class AccessDbContext(DbContextOptions<AccessDbContext> options)
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Account).HasMaxLength(256);
             entity.Property(x => x.CertificatePrincipal).HasMaxLength(256);
-            entity.HasIndex(x => new { x.IdentityId, x.TargetId }).IsUnique();
+            entity.HasIndex(x => new { x.IdentityId, x.EndpointAccountId }).IsUnique();
             entity.HasOne(x => x.Identity).WithMany()
                 .HasForeignKey(x => x.IdentityId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Target).WithMany()
                 .HasForeignKey(x => x.TargetId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.EndpointAccount).WithMany()
+                .HasForeignKey(x => x.EndpointAccountId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.SshLoginKey).WithMany()
+                .HasForeignKey(x => x.SshLoginKeyId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        model.Entity<PreRegisteredGrant>(entity =>
+        {
+            entity.ToTable("pre_registered_grants");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Issuer).HasMaxLength(512);
+            entity.Property(x => x.UserName).HasMaxLength(256);
+            entity.Property(x => x.Account).HasMaxLength(256);
+            entity.HasIndex(x => new { x.Issuer, x.UserName, x.EndpointAccountId }).IsUnique();
+            entity.HasOne(x => x.Target).WithMany()
+                .HasForeignKey(x => x.TargetId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.EndpointAccount).WithMany()
+                .HasForeignKey(x => x.EndpointAccountId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.SshLoginKey).WithMany()
                 .HasForeignKey(x => x.SshLoginKeyId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -117,6 +152,8 @@ internal sealed class AccessDbContext(DbContextOptions<AccessDbContext> options)
                     RequireId(identity.Id);
                     RequireText(identity.Issuer, 512);
                     RequireText(identity.Subject, 256);
+                    if (identity.UserName is not null)
+                        RequireText(identity.UserName, 256);
                     break;
                 case UserCertificateAuthority authority:
                     RequireId(authority.Id);
@@ -162,6 +199,7 @@ internal sealed class AccessDbContext(DbContextOptions<AccessDbContext> options)
                     RequireId(grant.Id);
                     RequireId(grant.IdentityId);
                     RequireId(grant.TargetId);
+                    RequireId(grant.EndpointAccountId);
                     if (grant.SshLoginKeyId is { } loginKeyId)
                         RequireId(loginKeyId);
                     RequireText(grant.Account, 256);
@@ -169,6 +207,25 @@ internal sealed class AccessDbContext(DbContextOptions<AccessDbContext> options)
                         RequireText(grant.CertificatePrincipal, 256);
                     if (grant.ExpiresAt is { Offset: var offset } && offset != TimeSpan.Zero)
                         throw new InvalidOperationException("Grant expiry must use UTC.");
+                    break;
+                case PreRegisteredGrant pending:
+                    RequireId(pending.Id);
+                    RequireId(pending.TargetId);
+                    RequireId(pending.EndpointAccountId);
+                    if (pending.SshLoginKeyId is { } pendingLoginKeyId)
+                        RequireId(pendingLoginKeyId);
+                    RequireText(pending.Issuer, 512);
+                    RequireText(pending.UserName, 256);
+                    RequireText(pending.Account, 256);
+                    break;
+                case SshEndpointAccount endpointAccount:
+                    RequireId(endpointAccount.Id);
+                    RequireId(endpointAccount.TargetId);
+                    if (endpointAccount.SshLoginKeyId is { } endpointLoginKeyId)
+                        RequireId(endpointLoginKeyId);
+                    RequireText(endpointAccount.Account, 256);
+                    if (endpointAccount.CertificatePrincipal is not null)
+                        RequireText(endpointAccount.CertificatePrincipal, 256);
                     break;
             }
         }

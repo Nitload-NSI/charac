@@ -72,10 +72,12 @@ internal static class SshLoginKeyCommand
 
     private static async Task<int> AssignAsync(AccessDbContext database, Guid grantId, string name)
     {
-        var grant = await database.Grants.SingleOrDefaultAsync(x => x.Id == grantId)
+        var grant = await database.Grants.Include(x => x.EndpointAccount).SingleOrDefaultAsync(x => x.Id == grantId)
             ?? throw new InvalidOperationException("The grant does not exist.");
         var key = await database.LoginKeys.SingleOrDefaultAsync(x => x.Name == name && x.Enabled)
             ?? throw new InvalidOperationException("The enabled SSH login key does not exist.");
+        grant.EndpointAccount.SshLoginKeyId = key.Id;
+        grant.EndpointAccount.SshLoginKey = key;
         grant.SshLoginKeyId = key.Id;
         await database.SaveChangesAsync();
         Console.WriteLine($"SSH login key {key.Name} assigned to grant {grantId}.");
@@ -84,8 +86,10 @@ internal static class SshLoginKeyCommand
 
     private static async Task<int> UnassignAsync(AccessDbContext database, Guid grantId)
     {
-        var grant = await database.Grants.SingleOrDefaultAsync(x => x.Id == grantId)
+        var grant = await database.Grants.Include(x => x.EndpointAccount).SingleOrDefaultAsync(x => x.Id == grantId)
             ?? throw new InvalidOperationException("The grant does not exist.");
+        grant.EndpointAccount.SshLoginKeyId = null;
+        grant.EndpointAccount.SshLoginKey = null;
         grant.SshLoginKeyId = null;
         await database.SaveChangesAsync();
         Console.WriteLine($"SSH login key unassigned from grant {grantId}.");
@@ -108,7 +112,7 @@ internal static class SshLoginKeyCommand
             {
                 x.Id, TargetName = x.Target.Name, x.Target.Address, x.Account,
                 x.Identity.Issuer, x.Identity.Subject, x.Enabled,
-                LoginKey = x.SshLoginKey == null ? null : x.SshLoginKey.Name
+                LoginKey = x.EndpointAccount.SshLoginKey == null ? null : x.EndpointAccount.SshLoginKey.Name
             }).ToArrayAsync();
         foreach (var grant in grants)
             Console.WriteLine($"{grant.Id} target={grant.TargetName} address={grant.Address} account={grant.Account} issuer={grant.Issuer} subject={grant.Subject} enabled={grant.Enabled} key={grant.LoginKey ?? "(password)"}");

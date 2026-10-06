@@ -24,4 +24,37 @@ public sealed class ClientConfigurationTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void CreatesEmptyConfigurationWhenMissing()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "rac-client-config-" + Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(directory, "client.config");
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() => ClientConfiguration.LoadServer(path));
+            Assert.True(File.Exists(path));
+            Assert.Contains("[client]", File.ReadAllText(path));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void WritesDefaultServerConfiguration()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "rac-client-config-" + Guid.NewGuid().ToString("N"));
+        var path = Path.Combine(directory, "client.config");
+        try
+        {
+            ClientConfiguration.SetDefaultServer(path, "https://access.example.com");
+            Assert.Equal("https://access.example.com/", ClientConfiguration.LoadServer(path));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 }

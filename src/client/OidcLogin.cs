@@ -47,7 +47,7 @@ internal static class OidcLogin
             ["response_type"] = "code",
             ["client_id"] = clientId,
             ["redirect_uri"] = redirectUri,
-            ["scope"] = "openid",
+              ["scope"] = "openid profile",
             ["state"] = state,
             ["code_challenge"] = challenge,
             ["code_challenge_method"] = "S256"

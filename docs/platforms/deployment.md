@@ -1,6 +1,6 @@
 # 平台部署
 
-当前提供 Windows x64 Client MSI、Fedora/RHEL 系 Linux x64 Server RPM 和 Client RPM，以及 Termux aarch64 Client DEB。RPM/MSI 由 .NET 10 发布目录生成；`packaging/package.ps1` 只负责封装，发布目录必须先经过 NUKE `Publish`（含 `Verify`）。Android/One UI 的 Termux 启动器 APK 已可生成调试包，需与 Termux DEB 配合，见 [Android 客户端](android-client.md)。
+当前提供可用的 Windows x64 Client MSI、Fedora/RHEL 系 Linux x64 Server RPM 和 Client RPM；Termux aarch64 Client DEB 当前已知不可用，不作为交付包。RPM/MSI 由 .NET 10 发布目录生成；`packaging/package.ps1` 只负责封装，发布目录必须先经过 NUKE `Publish`（含 `Verify`）。Android/One UI 的 Termux 启动器 APK 仅作为调试辅助，见 [Android 客户端](android-client.md)。
 
 在仓库根目录执行：
 
@@ -38,5 +38,5 @@ Server 运行时只需 `--config /etc/charac/workspace-access.config`。这一�
 
 Client RPM 安装自包含程序到 `/opt/charac/client`，并提供 `/usr/bin/charac` 命令。Windows MSI 以 per-machine 方式安装到 `Program Files\nitload\charac`，会触发 UAC 管理员授权，并把安装目录加入系统 `PATH`；新终端可运行 `charac.exe --help`。MSI 内嵌所需文件，不依赖独立 CAB。两个 Client 包均不预置登录令牌或目标配置。
 
-RPM 尚需在目标 Fedora/RHEL 机器进行实际安装、升级、卸载和 systemd 验收；Termux DEB 尚需在真实 Android/Termux 设备上安装、启动和登录验收；MSI 尚需在正常启用 Windows Installer 服务的 Windows 机器进行安装、升级、卸载验收。当前构建环境完成了 RPM 生成及文件头检查、Termux DEB 控制字段和文件路径检查、MSI 生成及文件表反编译检查；受限环境里的 ICE 校验无法连接 Windows Installer 服务。
+RPM 和 MSI 已完成本地构建验证，并在目标环境完成 Server RPM / Windows Client 的可用性验证；Termux DEB 当前明确标记为不可用，暂不进行交付验收。MSI 仍需在正常启用 Windows Installer 服务的机器上完成安装、升级、卸载验收；受限环境里的 ICE 校验无法连接 Windows Installer 服务。
 Client 可在用户级 INI 的 `[client] server` 写入默认 HTTPS origin，样例见仓库根目录 `client.config.example`；Client RPM 另安装到 `/usr/share/doc/charac-client/client.config.example`，MSI 则安装到程序目录。Windows 默认读取 `%APPDATA%\Charac\client.config`；Linux/Termux 默认读取 `$XDG_CONFIG_HOME/charac/client.config`，未设置时读取 `~/.config/charac/client.config`。首次执行无配置的 Client 命令会自动创建默认配置目录，但不会写入服务器地址。之后可直接执行 `charac connect`（Windows 为 `charac.exe connect`），或使用更短的 `charac connect https://access.example.com`；`--server <origin>` 可临时覆盖，`--config <路径>` 可在命令前选用其他配置。该文件只存入口地址，不存 OIDC 令牌；旧版 `%APPDATA%\CharRAC`、`~/.config/char-rac` 配置在新位置不存在时仍会自动读取。Client 安装级设备凭据仍独立存于用户本地应用数据目录，不能复制到多台设备共用。

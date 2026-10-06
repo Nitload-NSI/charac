@@ -3,6 +3,7 @@ using System;
 using Charac.Server.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Charac.Server.Data.Migrations
 {
     [DbContext(typeof(AccessDbContext))]
-    partial class AccessDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261006132618_UsernamePreRegisteredGrants")]
+    partial class UsernamePreRegisteredGrants
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -41,9 +44,6 @@ namespace Charac.Server.Data.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid>("EndpointAccountId")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -58,13 +58,11 @@ namespace Charac.Server.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EndpointAccountId");
-
                     b.HasIndex("SshLoginKeyId");
 
                     b.HasIndex("TargetId");
 
-                    b.HasIndex("IdentityId", "EndpointAccountId")
+                    b.HasIndex("IdentityId", "TargetId")
                         .IsUnique();
 
                     b.ToTable("grants", "access");
@@ -118,9 +116,6 @@ namespace Charac.Server.Data.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid>("EndpointAccountId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Issuer")
                         .IsRequired()
                         .HasMaxLength(512)
@@ -139,50 +134,14 @@ namespace Charac.Server.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EndpointAccountId");
-
                     b.HasIndex("SshLoginKeyId");
 
                     b.HasIndex("TargetId");
 
-                    b.HasIndex("Issuer", "UserName", "EndpointAccountId")
+                    b.HasIndex("Issuer", "UserName", "TargetId")
                         .IsUnique();
 
                     b.ToTable("pre_registered_grants", "access");
-                });
-
-            modelBuilder.Entity("Charac.Server.Data.Entities.SshEndpointAccount", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Account")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("CertificatePrincipal")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid?>("SshLoginKeyId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TargetId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SshLoginKeyId");
-
-                    b.HasIndex("TargetId", "Account")
-                        .IsUnique();
-
-                    b.ToTable("endpoint_accounts", "access");
                 });
 
             modelBuilder.Entity("Charac.Server.Data.Entities.SshHostKey", b =>
@@ -355,12 +314,6 @@ namespace Charac.Server.Data.Migrations
 
             modelBuilder.Entity("Charac.Server.Data.Entities.AccessGrant", b =>
                 {
-                    b.HasOne("Charac.Server.Data.Entities.SshEndpointAccount", "EndpointAccount")
-                        .WithMany()
-                        .HasForeignKey("EndpointAccountId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("Charac.Server.Data.Entities.AccessIdentity", "Identity")
                         .WithMany()
                         .HasForeignKey("IdentityId")
@@ -378,8 +331,6 @@ namespace Charac.Server.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("EndpointAccount");
-
                     b.Navigation("Identity");
 
                     b.Navigation("SshLoginKey");
@@ -388,32 +339,6 @@ namespace Charac.Server.Data.Migrations
                 });
 
             modelBuilder.Entity("Charac.Server.Data.Entities.PreRegisteredGrant", b =>
-                {
-                    b.HasOne("Charac.Server.Data.Entities.SshEndpointAccount", "EndpointAccount")
-                        .WithMany()
-                        .HasForeignKey("EndpointAccountId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Charac.Server.Data.Entities.SshLoginKey", "SshLoginKey")
-                        .WithMany()
-                        .HasForeignKey("SshLoginKeyId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Charac.Server.Data.Entities.SshTarget", "Target")
-                        .WithMany()
-                        .HasForeignKey("TargetId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("EndpointAccount");
-
-                    b.Navigation("SshLoginKey");
-
-                    b.Navigation("Target");
-                });
-
-            modelBuilder.Entity("Charac.Server.Data.Entities.SshEndpointAccount", b =>
                 {
                     b.HasOne("Charac.Server.Data.Entities.SshLoginKey", "SshLoginKey")
                         .WithMany()

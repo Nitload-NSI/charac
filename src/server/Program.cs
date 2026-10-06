@@ -24,7 +24,7 @@ internal static class Program
         args = parsed.Command;
         if (args is ["--help"] or ["-h"])
         {
-            Console.WriteLine("Usage: char_rac_server [--config <path>] [serve --local-probe] | status | sessions | reload | disconnect --subject <oidc-subject> --confirm | endpoint_regist <name> <ssh-address> <private-key-path> | database migrate | database target register <name> <address> <port> <host-key-file> | database target list | database grant register <target-name> <oidc-subject> <account> [<login-key-name>] | database grant list | database key register <name> <file-name> | database key assign <grant-id> <name> | database key unassign <grant-id> | database key list | database key grants | database enroll-probe <target-name> <oidc-subject> <key-name> | database grant-probe <target-id> <issuer> <subject> | database list-probes | database clear-probes | ssh probe [<address> <port> <account> <host-public-key>] | ssh broker-probe [<address> <port> <account> <host-public-key>] | ssh key-probe <target-id> <oidc-subject>");
+            Console.WriteLine("Usage: char_rac_server [--config <path>] [serve --local-probe] | grant <user-name> <target-name> <account> [<login-key-name>] | status | sessions | reload | disconnect --subject <oidc-subject> --confirm | endpoint_regist <name> <ssh-address> <private-key-path> | database migrate | database target register <name> <address> <port> <host-key-file> | database target list | database grant register <target-name> <oidc-subject> <account> [<login-key-name>] | database grant pre-register <target-name> <user-name> <account> [<login-key-name>] | database grant pending | database grant list | database key register <name> <file-name> | database key assign <grant-id> <name> | database key unassign <grant-id> | database key list | database key grants | database enroll-probe <target-name> <oidc-subject> <key-name> | database grant-probe <target-id> <issuer> <subject> | database list-probes | database clear-probes | ssh probe [<address> <port> <account> <host-public-key>] | ssh broker-probe [<address> <port> <account> <host-public-key>] | ssh key-probe <target-id> <oidc-subject>");
             return 0;
         }
         if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
@@ -41,6 +41,8 @@ internal static class Program
         }
         if (args is ["database", "migrate"])
             return await DatabaseCommands.MigrateAsync(parsed.ConfigPath);
+        if (args is ["grant", ..])
+            return await AccessRegistrationCommand.RunAsync(args, parsed.ConfigPath);
         if (args is ["database", "key", ..])
             return await SshLoginKeyCommand.RunAsync(args, parsed.ConfigPath);
         if (args is ["database", "target" or "grant", ..])

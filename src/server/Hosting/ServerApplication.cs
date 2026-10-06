@@ -63,6 +63,7 @@ internal static class ServerApplication
         if (connection is not null)
         {
             builder.Services.AddDbContext<AccessDbContext>(options => DatabaseSettings.Configure(options, connection));
+            builder.Services.AddScoped<OidcIdentityBinding>();
             builder.Services.AddScoped<SshAccessResolver>();
             builder.Services.AddScoped<SshBroker>();
             builder.Services.AddSingleton<WorkspaceRecordStore>();
@@ -112,6 +113,19 @@ internal static class ServerApplication
         {
             app.UseAuthentication();
             app.UseAuthorization();
+            if (connection is not null)
+            {
+                app.Use(async (context, next) =>
+                {
+                    if (context.User.Identity?.IsAuthenticated == true &&
+                        ClientSessionRoutes.TryIdentity(context.User, out var identity))
+                    {
+                        await context.RequestServices.GetRequiredService<OidcIdentityBinding>()
+                            .BindAsync(identity, context.RequestAborted);
+                    }
+                    await next(context);
+                });
+            }
         }
         app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }));
         app.MapGet("/health/ready", async (DatabaseReadiness database, CancellationToken cancellationToken) =>

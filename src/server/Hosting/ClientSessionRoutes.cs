@@ -312,12 +312,13 @@ internal static class ClientSessionRoutes
     {
         var issuer = principal.FindFirst("iss")?.Value;
         var subject = principal.FindFirst("sub")?.Value;
+        var userName = principal.FindFirst("preferred_username")?.Value;
         if (string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(subject))
         {
             identity = null!;
             return false;
         }
-        identity = new ExternalIdentity(issuer, subject);
+        identity = new ExternalIdentity(issuer, subject, userName);
         return true;
     }
 

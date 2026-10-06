@@ -12,7 +12,7 @@ internal sealed class SshAccessResolver(AccessDbContext database, TimeProvider c
     public Task<SshTargetResource[]> ListTargetsAsync(ExternalIdentity identity,
         CancellationToken cancellationToken = default) =>
         AuthorizedGrants(identity).OrderBy(x => x.Target.Name).ThenBy(x => x.TargetId)
-            .Select(x => new SshTargetResource(x.TargetId, x.Target.Name, x.Account))
+            .Select(x => new SshTargetResource(x.TargetId, x.Target.Name, x.EndpointAccount.Account))
             .ToArrayAsync(cancellationToken);
 
     public async Task<SshAccessDecision?> ResolveAsync(
@@ -23,7 +23,7 @@ internal sealed class SshAccessResolver(AccessDbContext database, TimeProvider c
             return null;
 
         var grant = await AuthorizedGrants(identity).AsSingleQuery()
-            .Include(x => x.SshLoginKey)
+            .Include(x => x.EndpointAccount).ThenInclude(x => x.SshLoginKey)
             .Include(x => x.Target).ThenInclude(x => x.UserCertificateAuthority)
             .Include(x => x.Target).ThenInclude(x => x.HostKeys.Where(key => key.Enabled))
             .Where(x => x.TargetId == targetId)
@@ -34,10 +34,10 @@ internal sealed class SshAccessResolver(AccessDbContext database, TimeProvider c
 
         var target = grant.Target;
         return new SshAccessDecision(grant.Id, target.Id, target.Address, target.Port,
-            grant.Account, grant.CertificatePrincipal, target.UserCertificateAuthorityId,
+            grant.EndpointAccount.Account, grant.EndpointAccount.CertificatePrincipal, target.UserCertificateAuthorityId,
             target.UserCertificateAuthority?.PublicKey, target.UserCertificateAuthority?.SigningKeyReference,
             target.HostKeys.Select(x => x.PublicKey).ToArray(), grant.ExpiresAt,
-            grant.SshLoginKeyId, grant.SshLoginKey?.FileName);
+            grant.EndpointAccount.SshLoginKeyId, grant.EndpointAccount.SshLoginKey?.FileName);
     }
 
     private IQueryable<AccessGrant> AuthorizedGrants(ExternalIdentity identity)
@@ -47,7 +47,8 @@ internal sealed class SshAccessResolver(AccessDbContext database, TimeProvider c
         return database.Grants.AsNoTracking().Where(x =>
             x.Identity.Issuer == identity.Issuer && x.Identity.Subject == identity.Subject &&
             x.Enabled && x.Identity.Enabled && x.Target.Enabled &&
-            (x.SshLoginKeyId == null || x.SshLoginKey!.Enabled) &&
+            x.EndpointAccount.Enabled &&
+            (x.EndpointAccount.SshLoginKeyId == null || x.EndpointAccount.SshLoginKey!.Enabled) &&
             (x.ExpiresAt == null || x.ExpiresAt > now) &&
             x.Target.HostKeys.Any(key => key.Enabled));
     }

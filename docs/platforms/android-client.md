@@ -2,11 +2,11 @@
 
 Termux 登录不让浏览器直接访问 Termux 的 `127.0.0.1`：CLI 通过 `termux-open-url` 启动 APK，APK 注册 `com.nitload.charac://oauth/callback` 并接收 authentik 回调，再用 `RUN_COMMAND` 调用 `charac callback` 将授权码转回 CLI 的本地监听器。
 
-推荐把 Android CLI 作为 Termux DEB 分发，而不是把 CLI 当成普通 Android APK。APK 只是可选的 One UI 启动器：它不能单独运行 CLI，必须与 Termux、Termux DEB、运行命令权限和 `allow-external-apps=true` 配置一起使用。直接安装 APK 后点击图标不能替代 Termux 环境，也不会自动安装 .NET 或 `charac`。
+推荐把 Android CLI 作为 Termux DEB 分发，而不是把 CLI 当成普通 Android APK。**当前 Termux DEB 已标记为不可用，暂不作为交付包；下面的安装步骤仅保留用于后续修复和设备验收。** APK 只是可选的 One UI 启动器：它不能单独运行 CLI，必须与 Termux、Termux DEB、运行命令权限和 `allow-external-apps=true` 配置一起使用。直接安装 APK 后点击图标不能替代 Termux 环境，也不会自动安装 .NET 或 `charac`。
 
-Android 首期支持 ARM64 设备上的 Termux 终端，CLI 使用 `linux-bionic-arm64` RID。另有独立的 .NET Android 启动器项目 `src/android/CharacAndroid.csproj`，包 ID 为 `com.nitload.charac`；Server 仍只部署在 Windows 或 Linux。
+Android 首期支持 ARM64 设备上的 Termux 终端，CLI 使用 `linux-bionic-arm64` RID。当前 DEB 在真实 Termux 环境不可用，不能宣称安装后可运行；另有独立的 .NET Android 启动器项目 `src/android/CharacAndroid.csproj`，包 ID 为 `com.nitload.charac`；Server 仍只部署在 Windows 或 Linux。
 
-执行 `./build.ps1 --target Publish --runtime linux-bionic-arm64 --locked-restore`，或在 Linux 上使用 `bash ./build.sh`。随后运行 `./packaging/package.ps1 -Target ClientTermuxDeb`，生成 `artifacts/packages/<版本>/charac-termux_<版本>-2_aarch64.deb`。该包面向标准包名 `com.termux` 的 apt 版 aarch64 Termux，将 framework-dependent Client 安装到 `$PREFIX/opt/charac`，将 `charac` 入口装到 `$PREFIX/bin`，依赖 Termux 提供的 `dotnet-runtime-10.0`。它不承诺裸 Debian/Ubuntu 环境兼容。在 Termux 中复制 DEB 后运行 `apt install ./charac-termux_<版本>-2_aarch64.deb`；当前尚未发布到 Termux 仓库，因此 `pkg install charac-termux` 还不能从公共仓库下载它。APK 的环境检查会识别包提供的固定入口。
+执行 `./build.ps1 --target Publish --runtime linux-bionic-arm64 --locked-restore`，或在 Linux 上使用 `bash ./build.sh`。随后运行 `./packaging/package.ps1 -Target ClientTermuxDeb`，可生成 `artifacts/packages/<版本>/charac-termux_<版本>-2_aarch64.deb`，但当前包已知不可用，不应安装到生产设备或作为 Release 可用资产。修复前不把 DEB 标记为可交付；APK 的环境检查也不能视为 CLI 已可用。
 
 如果暂时不使用 DEB，也可以复制 `artifacts/publish/linux-bionic-arm64/client/` 到 Termux 私有目录，例如 `$HOME/.local/opt/charac`；该目录是 framework-dependent 发布，需要先安装 Termux 的 `dotnet-runtime-10.0`。为 APK 提供固定入口 `$PREFIX/bin/charac`，其内容用 Termux 的 `sh` 调用 `dotnet $HOME/.local/opt/charac/charac.dll` 并原样传递参数；入口必须可执行。
 
