@@ -63,7 +63,7 @@ if ($Target -eq 'ClientTermuxDeb') {
     if (-not (Test-Path -LiteralPath $NfpmPath -PathType Leaf)) { throw 'nFPM 2.47.0 is required; pass -NfpmPath.' }
     $prefix = '/data/data/com.termux/files/usr'
     $lines = [System.Collections.Generic.List[string]]::new()
-    $lines.Add('name: charac')
+    $lines.Add('name: charac-termux')
     $lines.Add("version: $version")
     $lines.Add('release: 2')
     $lines.Add('arch: aarch64')
@@ -86,7 +86,7 @@ if ($Target -eq 'ClientTermuxDeb') {
     Add-PackageFile $lines (Join-Path $repository 'src/client/Assets/Fonts/IBM-Plex-LICENSE.txt') "$prefix/share/doc/charac/IBM-Plex-LICENSE.txt"
     $config = Join-Path $scratch 'charac-termux.yaml'
     [IO.File]::WriteAllLines($config, [string[]]$lines)
-    $output = Join-Path $packages "charac_${version}-2_aarch64.deb"
+    $output = Join-Path $packages "charac-termux_${version}-2_aarch64.deb"
     & $NfpmPath package --config $config --packager deb --target $output
     if ($LASTEXITCODE -ne 0) { throw "nFPM failed with exit code $LASTEXITCODE." }
     Write-Output $output
