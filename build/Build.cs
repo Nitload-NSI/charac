@@ -24,7 +24,7 @@ internal sealed class Build : NukeBuild
     [Parameter("Require dependency versions from packages.lock.json.")]
     readonly bool LockedRestore;
 
-    AbsolutePath SolutionFile => RootDirectory / "WorkspaceAccess.slnx";
+    AbsolutePath SolutionFile => RootDirectory / "Charac.slnx";
     AbsolutePath ServerProject => RootDirectory / "src/server/WorkspaceAccessServer.csproj";
     AbsolutePath ClientProject => RootDirectory / "src/client/WorkspaceAccessClient.csproj";
     AbsolutePath TestProject => RootDirectory / "tests/WorkspaceAccessServer.Tests/WorkspaceAccessServer.Tests.csproj";

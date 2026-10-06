@@ -1,10 +1,10 @@
 # 身份认证与授权
 
-CLI 已实现 authentik OIDC Authorization Code + PKCE 的浏览器登录和本机回调；令牌仅保存在当前 CLI 进程内。Server 使用 JWT Bearer 中间件从 HTTPS OIDC discovery 获取签名密钥，校验签名、issuer、audience 和有效期，再以稳定的 `(iss, sub)` 识别用户。资源列表、创建、附着、结束工作区均重新查询数据库授权。需在 authentik 创建 public client、启用 PKCE、设置允许的 `http://127.0.0.1:<动态端口>/callback` 回调，并为 Provider 配置非对称 JWT 签名密钥。Server 配置 `[oidc] issuer` 和 `client_id`；若采用 authentik 的全局 issuer 模式，还需设置指向应用 slug 下 discovery 文档的 `discovery_url`。2026-10-03 已通过真实 authentik public client 的 demo 浏览器登录与令牌交换；2026-10-04 正式 Client 的 `login` 已通过 Server 令牌校验；2026-10-05 已在 `.100 → .101` 实测目标授权、资源选择和交互式 `ls`；正常退出及重新附着待复测。
+CLI 已实现 authentik OIDC Authorization Code + PKCE 的浏览器登录和本机回调；令牌仅保存在当前 CLI 进程内。Server 使用 JWT Bearer 中间件从 HTTPS OIDC discovery 获取签名密钥，校验签名、issuer、audience 和有效期，再以稳定的 `(iss, sub)` 识别用户。资源列表、创建、附着、结束工作区均重新查询数据库授权。需在 authentik 创建 public client、启用 PKCE、设置允许的 `http://127.0.0.1:<动态端口>/callback` 回调，并为 Provider 配置非对称 JWT 签名密钥。Server 配置 `[oidc] issuer` 和 `client_id`；若采用 authentik 的全局 issuer 模式，还需设置指向应用 slug 下 discovery 文档的 `discovery_url`。正式 Client 的 `login` 已通过真实 authentik 浏览器登录及 Server 令牌校验；2026-10-05 已在 `.100 → .101` 实测目标授权、资源选择和交互式 `ls`；正常退出及重新附着待复测。
 
 管理员将外部身份映射到允许访问的目标机器和系统账户。Windows 目标使用账户 SID，Linux 目标使用 UID/GID；实际登录环境及文件权限由目标 sshd 和操作系统建立。不同外部身份即使映射到同一个系统账户，工作区归属仍独立。
 
-Server 当前的 `access.identities` 只保存 `(issuer, subject)` 身份键和启用状态，并不保存用户资料。若未来加入本地易读名称，应命名为 **user label**，仅供管理员识别和显示；标签不能作为认证或授权依据，也不能声称是从身份平台实时同步的资料。姓名、邮箱等真正的用户资料由 authentik 或其他 OIDC Provider 管理；Server 不直接读取 authentik 的 PostgreSQL。正式 Client 的 `login` 和 `connect` 使用相同的浏览器登录与回调页；独立的 [OIDC CLI Playground](../demo/oidc-cli/README.md) 保留为身份提供方调试入口。具体命令见[正式 Client 流程](client-server-transport.md)。
+Server 当前的 `access.identities` 只保存 `(issuer, subject)` 身份键和启用状态，并不保存用户资料。若未来加入本地易读名称，应命名为 **user label**，仅供管理员识别和显示；标签不能作为认证或授权依据，也不能声称是从身份平台实时同步的资料。姓名、邮箱等真正的用户资料由 authentik 或其他 OIDC Provider 管理；Server 不直接读取 authentik 的 PostgreSQL。正式 Client 的 `login` 和 `connect` 使用相同的浏览器登录与回调页。具体命令见[正式 Client 流程](client-server-transport.md)。
 
 当前建连支持 Server 托管的 SSH 登录私钥或一次性输入的 SSH 密码，两者均继续验证数据库中登记的目标主机公钥。密钥授权不要求 Client 提供 SSH 密码；密码授权的密码在 HTTPS 请求体中传给 Server，不写入数据库或日志。私钥内容只保存在服务账户可访问的文件中，数据库保存引用。目标 sshd 只在内网对 Server 开放。正式用户登录只使用 OIDC；SSH CA 仍是可选的后端凭据方案，不是用户登录步骤。
 

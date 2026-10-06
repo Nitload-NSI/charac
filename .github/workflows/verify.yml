@@ -32,7 +32,7 @@ jobs:
         run: dotnet run --project build/Build.csproj --configuration Release --no-restore -- --target Publish --runtime ${{ matrix.runtime }} --locked-restore
       - uses: actions/upload-artifact@v4
         with:
-          name: workspace-access-${{ matrix.runtime }}
+          name: charac-${{ matrix.runtime }}
           path: artifacts/publish/${{ matrix.runtime }}/
       - uses: actions/upload-artifact@v4
         if: always()

@@ -12,7 +12,7 @@
 | SSH Broker 与会话 | SSH.NET 密码及登录密钥建连、授权账户与目标解析、主机公钥固定校验、PTY Shell、独立工作区控制权、有界输出与断线保留；本机 `broker-probe` 可发送 Linux `ls`，见[SSH 会话设计](ssh-session.md) |
 | 构建与打包 | Restore、Compile、Test、CheckDocs、Verify、Publish、RunServer、RunClient；Windows x64 Client MSI、Linux x64 Server/Client RPM、Termux aarch64 Client DEB 和 Android 调试 APK 已生成，仍需目标设备安装与运行验收；Client Windows x64 Native AOT 试编译成功，尚未作为默认包 |
 
-旧 Host/Agent、PowerShell 标准流后端及自行管理 PTY 的代码已移除。Server 的受保护调用入口和一次性 CLI 验收路径已接通；回环无 OIDC 的 `probe-session` 已在 `.100 → .101` 实测通过，`shell` 的持续键盘输入和 VT 画面已在 VS Code 终端试用。Windows VT 鼠标转发已接入但尚待复测；2026-10-05 托管 SSH 登录密钥已通过本机 `key-probe` 完成 `.100 → .101` 数据库授权、主机公钥、PTY 和 `ls` 实测；登录密钥登记只保存受保护私钥的文件引用，不要求 `.pub` 副本，目标主机公钥固定校验仍保留；正式 Client 已实测通过 authentik 登录、资源选择及 `.101` 交互式 `ls`；SSH 正常退出时的 WebSocket 关闭修复待复测。`demo/oidc-cli` 已在真实 authentik public client 下完成浏览器 PKCE 登录与令牌交换；2026-10-04 正式 Client 的 `login` 也已实测通过 Server 令牌验证；资源选择到 SSH 交互主链路已在 `.100 → .101` 实测，见[通信入口](client-server-transport.md)。
+旧 Host/Agent、PowerShell 标准流后端及自行管理 PTY 的代码已移除。Server 的受保护调用入口和一次性 CLI 验收路径已接通；回环无 OIDC 的 `probe-session` 已在 `.100 → .101` 实测通过，`shell` 的持续键盘输入和 VT 画面已在 VS Code 终端试用。Windows VT 鼠标转发已接入但尚待复测；2026-10-05 托管 SSH 登录密钥已通过本机 `key-probe` 完成 `.100 → .101` 数据库授权、主机公钥、PTY 和 `ls` 实测；登录密钥登记只保存受保护私钥的文件引用，不要求 `.pub` 副本，目标主机公钥固定校验仍保留；正式 Client 已实测通过 authentik 登录、资源选择及 `.101` 交互式 `ls`；SSH 正常退出时的 WebSocket 关闭修复待复测。正式 Client 的 `login` 已实测通过真实 authentik 浏览器 PKCE 登录与 Server 令牌验证；资源选择到 SSH 交互主链路已在 `.100 → .101` 实测，见[通信入口](client-server-transport.md)。
 
 ## 待实现
 

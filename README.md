@@ -1,4 +1,4 @@
-# Workspace Access
+# Charac
 
 面向 Windows 和 Linux 目标的远程 SSH 工作区管理服务，使用 .NET 10 开发；CLI 客户端另支持 Android ARM64 的 Termux 终端发布。服务端与 CLI 客户端分别位于 `src/server/` 和 `src/client/`。
 
@@ -10,7 +10,7 @@ SSH CA 是后端凭据的可选方案；正式用户登录使用 OIDC。首期�
 
 ## 当前状态
 
-当前已实现 Server 服务入口、EF Core/PostgreSQL 授权、OIDC 令牌校验、密码 SSH Broker、Session Manager 与 WebSocket；Client 提供 `login` 登录验证及 `connect` 的资源选择、交互创建/重新附着。demo 的真实 authentik PKCE 登录已通过，正式 Client 登录和 Server 验签已实测通过，资源选择 → SSH 整链路仍待验收，托管后端 SSH 凭据、自动重连和画面恢复待完善。`/health/live` 返回 200，`/health/ready` 返回 503，检查真实数据库状态并列出待集成项，数据库配置与迁移见[数据库文档](docs/database.md)。
+当前已实现 Server 服务入口、EF Core/PostgreSQL 授权、OIDC 令牌校验、托管私钥及密码 SSH Broker、Session Manager 与 WebSocket；Client 提供 `login` 登录验证及 `connect` 的资源选择、交互创建/重新附着。正式 Client 已在 `.100 → .101` 环境通过 authentik 登录、目标选择和交互式 `ls`；自动重连和画面恢复仍待完善。`/health/live` 返回 200，`/health/ready` 返回 503，检查真实数据库状态并列出待集成项，数据库配置与迁移见[数据库文档](docs/database.md)。
 
 ## 构建与运行
 
@@ -39,6 +39,10 @@ deploy/                          Windows Service 与 systemd 模板
 ```
 
 阅读[文档库](docs/README.md)、[单域名通信入口](docs/client-server-transport.md)、[架构](docs/architecture.md)、[交付状态](docs/implementation-status.md)和[贡献指南](CONTRIBUTING.md)。
+
+## 开发方式
+
+本项目采用 vibe coding 方式开发，代码和文档由 AI 辅助编写与迭代。功能范围与尚未完成的验收项以[交付状态](docs/implementation-status.md)为准。
 
 ## 许可证
 

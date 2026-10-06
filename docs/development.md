@@ -2,7 +2,7 @@
 
 使用 .NET 10 或更高版本 SDK。global.json 设置最低 SDK 并允许更高版本；项目目标框架为 net10.0，入口使用显式 Program.Main。包版本集中在 Directory.Packages.props，锁文件固定依赖解析。
 
-解决方案 WorkspaceAccess.slnx 包含 src/server/WorkspaceAccessServer.csproj、src/client/WorkspaceAccessClient.csproj、测试项目和 NUKE 项目。各项目的构建输出统一位于根目录 `temp/<项目名>/bin/`，中间文件位于 `temp/<项目名>/obj/`；`temp/` 被 Git 忽略。Windows 用 ./build.ps1，Linux 用 bash ./build.sh。
+解决方案 Charac.slnx 包含 src/server/WorkspaceAccessServer.csproj、src/client/WorkspaceAccessClient.csproj、测试项目和 NUKE 项目。各项目的构建输出统一位于根目录 `temp/<项目名>/bin/`，中间文件位于 `temp/<项目名>/obj/`；`temp/` 被 Git 忽略。Windows 用 ./build.ps1，Linux 用 bash ./build.sh。
 
 | NUKE 目标 | 行为 |
 | --- | --- |

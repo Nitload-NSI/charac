@@ -11,8 +11,6 @@ listen=http://127.0.0.1:5080
 ; issuer=https://auth.example.com/application/o/workspace-access/
 ; client_id=<authentik-client-id>
 ; discovery_url=https://auth.example.com/application/o/workspace-access/.well-known/openid-configuration
-; Optional: the OIDC CLI playground uses this URL to call Server /identity.
-; server_url=http://127.0.0.1:5080
 
 ; Local same-service-account control channel. Enable user disconnection only for an isolated service account.
 ; [management]

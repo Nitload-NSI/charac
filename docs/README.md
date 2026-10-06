@@ -21,7 +21,6 @@
 
 - [开发与构建](development.md)
 - [验证与验收](testing.md)
-- [CLI 唤起 authentik Playground](../demo/oidc-cli/README.md)
 - [Windows 部署模板](../deploy/windows/README.md)
 - [Linux 部署模板](../deploy/linux/README.md)
 

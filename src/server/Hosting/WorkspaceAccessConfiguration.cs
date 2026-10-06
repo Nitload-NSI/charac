@@ -50,7 +50,7 @@ internal static class WorkspaceAccessConfiguration
         {
             for (var directory = new DirectoryInfo(start); directory is not null; directory = directory.Parent)
             {
-                if (File.Exists(Path.Combine(directory.FullName, "WorkspaceAccess.slnx")))
+                if (File.Exists(Path.Combine(directory.FullName, "Charac.slnx")))
                     return directory.FullName;
             }
         }
