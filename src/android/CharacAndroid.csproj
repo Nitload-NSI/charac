@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationId>com.nitload.charac</ApplicationId>
     <RootNamespace>Charac.Android</RootNamespace>
-    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationVersion>2</ApplicationVersion>
     <ApplicationDisplayVersion>0.1.1</ApplicationDisplayVersion>
     <!--
       Enables trim analyzers and full trimming during Release mode.
