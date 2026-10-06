@@ -69,6 +69,9 @@ internal static class Program
             return await WorkspaceClient.RunLocalProbeAsync(probeServer);
         if (args is ["shell", "--server", var shellServer])
             return await WorkspaceClient.RunLocalShellAsync(shellServer);
+        if (args is ["callback", "--port", var portText, "--code", var code, "--state", var state] &&
+            int.TryParse(portText, out var callbackPort) && callbackPort is > 0 and <= 65535)
+            return await SendCallbackAsync(callbackPort, code, state);
 
         PrintUsage(Console.Error);
         return 2;
@@ -111,6 +114,26 @@ internal static class Program
         }
     }
 
+    private static async Task<int> SendCallbackAsync(int port, string code, string state)
+    {
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            var callback = new UriBuilder(Uri.UriSchemeHttp, "127.0.0.1", port, "/callback")
+            {
+                Query = $"code={Uri.EscapeDataString(code)}&state={Uri.EscapeDataString(state)}"
+            }.Uri;
+            using var response = await client.GetAsync(callback);
+            response.EnsureSuccessStatusCode();
+            return 0;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or UriFormatException)
+        {
+            Console.Error.WriteLine($"OIDC callback forwarding failed: {exception.Message}");
+            return 1;
+        }
+    }
+
     internal static bool TryGetServerUri(string value, out Uri serverUri)
     {
         serverUri = null!;
@@ -142,6 +165,7 @@ internal static class Program
         output.WriteLine("       charac attach --server https://access.example.com --id <workspace-id>");
         output.WriteLine("       charac probe-session --server http://127.0.0.1:5080");
         output.WriteLine("       charac shell --server http://127.0.0.1:5080");
+        output.WriteLine("       charac callback --port <port> --code <code> --state <state>");
         output.WriteLine("Login opens the browser and verifies identity with Server; tokens are kept only for this command.");
         output.WriteLine("Connect signs in, lists your resources when no ID is supplied, and opens an interactive workspace. Ctrl+] detaches; Server keeps the SSH session.");
         output.WriteLine("Run and attach sign in with OIDC and verify a Linux ls through the managed SSH workspace.");

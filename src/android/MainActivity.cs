@@ -9,12 +9,17 @@ using Android.Widget;
 namespace Charac.Android;
 
 [Activity(Label = "@string/app_name", MainLauncher = true, Exported = true, LaunchMode = LaunchMode.SingleTop)]
+[IntentFilter(new[] { Intent.ActionView }, Categories = new[] { Intent.CategoryDefault, Intent.CategoryBrowsable },
+    DataScheme = "com.nitload.charac", DataHost = "oauth")]
 public sealed class MainActivity : Activity
 {
     private const string TermuxPackage = "com.termux";
     private const string TermuxHome = "/data/data/com.termux/files/home";
     private const string TermuxBin = "/data/data/com.termux/files/usr/bin";
     private const string ResultAction = "com.nitload.charac.TERMUX_CHECK_RESULT";
+    private const string AuthUrlExtra = "charac_auth_url";
+    private const string CallbackPortExtra = "charac_callback_port";
+    private const string CallbackPortPreference = "oidc_callback_port";
     private TextView? _status;
     private bool _cliReady;
 
@@ -28,7 +33,10 @@ public sealed class MainActivity : Activity
         FindViewById<Button>(Resource.Id.launch)!.Click += (_, _) => Launch();
         ShowPrerequisites();
         if (Intent is not null)
+        {
             HandleCheckResult(Intent);
+            HandleBrokerIntent(Intent);
+        }
     }
 
     protected override void OnResume()
@@ -41,7 +49,76 @@ public sealed class MainActivity : Activity
     {
         base.OnNewIntent(intent);
         if (intent is not null)
+        {
             HandleCheckResult(intent);
+            HandleBrokerIntent(intent);
+        }
+    }
+
+    private void HandleBrokerIntent(Intent intent)
+    {
+        if (intent.GetStringExtra(AuthUrlExtra) is { Length: > 0 } authorizationUrl)
+        {
+            var port = intent.GetIntExtra(CallbackPortExtra, 0);
+            if (port is <= 0 or > 65535)
+            {
+                SetStatus("OIDC 回调端口无效。请从 Termux 重新发起登录。", false);
+                return;
+            }
+
+            var preferences = GetPreferences(FileCreationMode.Private);
+            if (preferences is null)
+            {
+                SetStatus("无法保存 OIDC 回调状态。请从 Termux 重新发起登录。", false);
+                return;
+            }
+            var editor = preferences.Edit();
+            if (editor is null)
+            {
+                SetStatus("无法保存 OIDC 回调状态。请从 Termux 重新发起登录。", false);
+                return;
+            }
+            var updatedEditor = editor.PutInt(CallbackPortPreference, port);
+            if (updatedEditor is null)
+            {
+                SetStatus("无法保存 OIDC 回调状态。请从 Termux 重新发起登录。", false);
+                return;
+            }
+            updatedEditor.Apply();
+            try
+            {
+                StartActivity(new Intent(Intent.ActionView, global::Android.Net.Uri.Parse(authorizationUrl)));
+                SetStatus("已打开浏览器。完成登录后将自动返回 Termux。", false);
+            }
+            catch (Exception exception)
+            {
+                SetStatus("无法打开浏览器：" + exception.Message, false);
+            }
+            return;
+        }
+
+        var callback = intent.Data;
+        if (callback is null || callback.Scheme != "com.nitload.charac" ||
+            callback.Host != "oauth" || callback.Path != "/callback")
+            return;
+
+        var portFromPreferences = GetPreferences(FileCreationMode.Private)!
+            .GetInt(CallbackPortPreference, 0);
+        var code = callback.GetQueryParameter("code");
+        var state = callback.GetQueryParameter("state");
+        if (portFromPreferences is <= 0 or > 65535 ||
+            string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(state))
+        {
+            SetStatus("OIDC 回调缺少必要参数。请从 Termux 重新发起登录。", false);
+            return;
+        }
+
+        var command = CommandIntent(TermuxBin + "/charac", [
+            "callback", "--port", portFromPreferences.ToString(),
+            "--code", code, "--state", state
+        ], true);
+        if (StartTermux(command))
+            SetStatus("登录回调已交给 Termux。请返回终端等待完成。", true);
     }
 
     private bool HasTermux()

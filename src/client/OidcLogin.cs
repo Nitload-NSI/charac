@@ -33,7 +33,10 @@ internal static class OidcLogin
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        var redirectUri = $"http://127.0.0.1:{port}/callback";
+        var termuxBroker = IsTermux();
+        var redirectUri = termuxBroker
+            ? "com.nitload.charac://oauth/callback"
+            : $"http://127.0.0.1:{port}/callback";
         var verifier = Base64Url(RandomNumberGenerator.GetBytes(32));
         var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
         var state = Base64Url(RandomNumberGenerator.GetBytes(32));
@@ -53,15 +56,10 @@ internal static class OidcLogin
                 $"{Uri.EscapeDataString(pair.Key)}={Uri.EscapeDataString(pair.Value)}"))
         }.Uri;
         Console.WriteLine($"Open this URL to sign in: {authorizationUri}");
-        try
-        {
-            Process.Start(new ProcessStartInfo(authorizationUri.ToString()) { UseShellExecute = true });
-        }
-        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or
-            PlatformNotSupportedException or InvalidOperationException)
-        {
-            Console.WriteLine("Open the URL manually in a browser on this device.");
-        }
+        if (termuxBroker)
+            StartTermuxBroker(authorizationUri, port);
+        else
+            OpenBrowser(authorizationUri);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(3));
@@ -84,6 +82,50 @@ internal static class OidcLogin
             tokenDocument.RootElement.GetProperty("access_token").GetString() is not { Length: > 0 } accessToken)
             throw new InvalidOperationException("OIDC token response did not contain a bearer access token.");
         return accessToken;
+    }
+
+    private static bool IsTermux() =>
+        OperatingSystem.IsLinux() &&
+        (Environment.GetEnvironmentVariable("TERMUX_VERSION") is not null ||
+         Environment.GetEnvironmentVariable("PREFIX")?.Contains("/com.termux/", StringComparison.Ordinal) == true);
+
+    private static void OpenBrowser(Uri authorizationUri)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(authorizationUri.ToString()) { UseShellExecute = true });
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or
+            PlatformNotSupportedException or InvalidOperationException)
+        {
+            Console.WriteLine("Open the URL manually in a browser on this device.");
+        }
+    }
+
+    private static void StartTermuxBroker(Uri authorizationUri, int port)
+    {
+        try
+        {
+            var start = new ProcessStartInfo("/system/bin/am") { UseShellExecute = false };
+            start.ArgumentList.Add("start");
+            start.ArgumentList.Add("-n");
+            start.ArgumentList.Add("com.nitload.charac/.MainActivity");
+            start.ArgumentList.Add("--es");
+            start.ArgumentList.Add("charac_auth_url");
+            start.ArgumentList.Add(authorizationUri.ToString());
+            start.ArgumentList.Add("--ei");
+            start.ArgumentList.Add("charac_callback_port");
+            start.ArgumentList.Add(port.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            using var process = Process.Start(start);
+            process?.WaitForExit(5000);
+            if (process is null || process.ExitCode != 0)
+                throw new InvalidOperationException("Android callback broker did not start.");
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Console.WriteLine($"Could not start the Android callback broker: {exception.Message}");
+            Console.WriteLine("Open the URL manually in a browser on this device.");
+        }
     }
 
     private static async Task<string> ReceiveCodeAsync(TcpListener listener, string expectedState,

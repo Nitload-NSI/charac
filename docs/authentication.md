@@ -1,5 +1,10 @@
 # 身份认证与授权
 
+桌面 Client 使用动态 loopback URI `http://127.0.0.1:<动态端口>/callback`；Termux
+Client 使用 `com.nitload.charac://oauth/callback`，由 Android APK 接收 authentik
+回调，再通过 Termux `RUN_COMMAND` 转回 CLI。authentik Provider 必须同时允许这两类
+Redirect URI。
+
 CLI 已实现 authentik OIDC Authorization Code + PKCE 的浏览器登录和本机回调；令牌仅保存在当前 CLI 进程内。Server 使用 JWT Bearer 中间件从 HTTPS OIDC discovery 获取签名密钥，校验签名、issuer、audience 和有效期，再以稳定的 `(iss, sub)` 识别用户。资源列表、创建、附着、结束工作区均重新查询数据库授权。需在 authentik 创建 public client、启用 PKCE、设置允许的 `http://127.0.0.1:<动态端口>/callback` 回调，并为 Provider 配置非对称 JWT 签名密钥。Server 配置 `[oidc] issuer` 和 `client_id`；若采用 authentik 的全局 issuer 模式，还需设置指向应用 slug 下 discovery 文档的 `discovery_url`。正式 Client 的 `login` 已通过真实 authentik 浏览器登录及 Server 令牌校验；2026-10-05 已在 `.100 → .101` 实测目标授权、资源选择和交互式 `ls`；正常退出及重新附着待复测。
 
 管理员将外部身份映射到允许访问的目标机器和系统账户。Windows 目标使用账户 SID，Linux 目标使用 UID/GID；实际登录环境及文件权限由目标 sshd 和操作系统建立。不同外部身份即使映射到同一个系统账户，工作区归属仍独立。
