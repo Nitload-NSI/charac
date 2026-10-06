@@ -39,3 +39,7 @@ deploy/                          Windows Service 与 systemd 模板
 ```
 
 阅读[文档库](docs/README.md)、[单域名通信入口](docs/client-server-transport.md)、[架构](docs/architecture.md)、[交付状态](docs/implementation-status.md)和[贡献指南](CONTRIBUTING.md)。
+
+## 许可证
+
+Charac 项目代码采用 [MIT 许可证](LICENSE)。Client 内嵌的 IBM Plex Mono 字体采用 [SIL Open Font License 1.1](src/client/Assets/Fonts/IBM-Plex-LICENSE.txt)，不属于项目的 MIT 授权范围。

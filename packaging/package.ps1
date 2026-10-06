@@ -50,7 +50,7 @@ if ($Target -eq 'ClientMsi') {
     if (-not $WixPath) { $WixPath = Join-Path $repository 'temp/tools/wix.exe' }
     if (-not (Test-Path -LiteralPath $WixPath -PathType Leaf)) { throw 'WiX CLI 6.0.2 is required; pass -WixPath.' }
     $output = Join-Path $packages "charac-client_${version}_win-x64.msi"
-    & $WixPath build '-arch' 'x64' '-d' "PackageVersion=$version" '-d' "PayloadDir=$payload" '-d' "ConfigTemplatePath=$(Join-Path $repository 'client.config.example')" '-pdbtype' 'none' '-o' $output (Join-Path $PSScriptRoot 'windows/Client.wxs')
+    & $WixPath build '-arch' 'x64' '-d' "PackageVersion=$version" '-d' "PayloadDir=$payload" '-d' "ConfigTemplatePath=$(Join-Path $repository 'client.config.example')" '-d' "LicensePath=$(Join-Path $repository 'LICENSE')" '-pdbtype' 'none' '-o' $output (Join-Path $PSScriptRoot 'windows/Client.wxs')
     if ($LASTEXITCODE -ne 0) { throw "WiX failed with exit code $LASTEXITCODE." }
     Write-Output $output
     exit 0
@@ -65,12 +65,12 @@ if ($Target -eq 'ClientTermuxDeb') {
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add('name: charac')
     $lines.Add("version: $version")
-    $lines.Add('release: 1')
+    $lines.Add('release: 2')
     $lines.Add('arch: aarch64')
     $lines.Add('platform: linux')
     $lines.Add('maintainer: nitload')
     $lines.Add('vendor: nitload')
-    $lines.Add('license: Proprietary')
+    $lines.Add('license: MIT AND OFL-1.1')
     $lines.Add('description: Charac CLI for Termux')
     $lines.Add('depends:')
     $lines.Add('  - dotnet-runtime-10.0')
@@ -82,9 +82,11 @@ if ($Target -eq 'ClientTermuxDeb') {
         Add-PackageFile $lines $file.FullName "$prefix/opt/charac/$relative" $mode
     }
     Add-PackageFile $lines (Join-Path $PSScriptRoot 'termux/charac') "$prefix/bin/charac" '0755'
+    Add-PackageFile $lines (Join-Path $repository 'LICENSE') "$prefix/share/doc/charac/LICENSE"
+    Add-PackageFile $lines (Join-Path $repository 'src/client/Assets/Fonts/IBM-Plex-LICENSE.txt') "$prefix/share/doc/charac/IBM-Plex-LICENSE.txt"
     $config = Join-Path $scratch 'charac-termux.yaml'
     [IO.File]::WriteAllLines($config, [string[]]$lines)
-    $output = Join-Path $packages "charac_${version}-1_aarch64.deb"
+    $output = Join-Path $packages "charac_${version}-2_aarch64.deb"
     & $NfpmPath package --config $config --packager deb --target $output
     if ($LASTEXITCODE -ne 0) { throw "nFPM failed with exit code $LASTEXITCODE." }
     Write-Output $output
@@ -99,7 +101,7 @@ if (-not $NfpmPath) { $NfpmPath = Join-Path $repository 'temp/tools/nfpm/nfpm.ex
 if (-not (Test-Path -LiteralPath $NfpmPath -PathType Leaf)) { throw 'nFPM 2.47.0 is required; pass -NfpmPath.' }
 
 $name = "charac-$kind"
-$release = if ($kind -eq 'server') { '2' } else { '1' }
+$release = if ($kind -eq 'server') { '3' } else { '2' }
 $lines = [System.Collections.Generic.List[string]]::new()
 $lines.Add("name: $name")
 $lines.Add("version: $version")
@@ -108,7 +110,7 @@ $lines.Add('arch: amd64')
 $lines.Add('platform: linux')
 $lines.Add('maintainer: nitload')
 $lines.Add('vendor: nitload')
-$lines.Add('license: Proprietary')
+$lines.Add($(if ($kind -eq 'server') { 'license: MIT' } else { 'license: MIT AND OFL-1.1' }))
 $lines.Add("description: Charac $kind")
 if ($kind -eq 'server') {
     $lines.Add('depends:')
@@ -118,6 +120,11 @@ if ($kind -eq 'server') {
     $lines.Add('  postremove: ' + (ConvertTo-Json -InputObject (Join-Path $PSScriptRoot 'linux/server-postremove.sh') -Compress))
 }
 $lines.Add('contents:')
+$licenseDirectory = "/usr/share/licenses/$name"
+Add-PackageFile $lines (Join-Path $repository 'LICENSE') "$licenseDirectory/LICENSE"
+if ($kind -eq 'client') {
+    Add-PackageFile $lines (Join-Path $repository 'src/client/Assets/Fonts/IBM-Plex-LICENSE.txt') "$licenseDirectory/IBM-Plex-LICENSE.txt"
+}
 $files = Get-ChildItem -LiteralPath $payload -Recurse -File | Sort-Object FullName
 foreach ($file in $files) {
     $relative = [IO.Path]::GetRelativePath($payload, $file.FullName).Replace('\', '/')

@@ -17,12 +17,16 @@
     <Component Id="ClientConfigTemplate" Directory="INSTALLFOLDER" Guid="*">
       <File Id="ClientConfigTemplateFile" Source="$(var.ConfigTemplatePath)" KeyPath="yes" />
     </Component>
+    <Component Id="ClientLicense" Directory="INSTALLFOLDER" Guid="*">
+      <File Id="ClientLicenseFile" Source="$(var.LicensePath)" KeyPath="yes" />
+    </Component>
     <Feature Id="Complete" Title="Charac Client" Level="1">
       <Files Directory="INSTALLFOLDER" Include="$(var.PayloadDir)\**">
         <Exclude Files="$(var.PayloadDir)\**.pdb" />
       </Files>
       <ComponentRef Id="ClientPath" />
       <ComponentRef Id="ClientConfigTemplate" />
+      <ComponentRef Id="ClientLicense" />
     </Feature>
   </Package>
 </Wix>
