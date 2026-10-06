@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repository = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $version = ([xml](Get-Content -LiteralPath (Join-Path $repository 'Directory.Build.props') -Raw)).Project.PropertyGroup.Version
-$packages = Join-Path $repository 'artifacts/packages'
+$packages = Join-Path $repository "artifacts/packages/$version"
 $scratch = Join-Path $repository 'temp/packaging'
 New-Item -ItemType Directory -Path $packages, $scratch -Force | Out-Null
 

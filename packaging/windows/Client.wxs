@@ -3,9 +3,9 @@
            UpgradeCode="0F2E0762-42F8-431B-BA94-B8BD63B0C103" Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="A newer Charac Client is already installed." />
     <MediaTemplate EmbedCab="yes" />
-    <StandardDirectory Id="ProgramFiles6432Folder">
+    <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="CompanyFolder" Name="nitload">
-        <Directory Id="INSTALLFOLDER" Name="Charac Client" />
+        <Directory Id="INSTALLFOLDER" Name="charac" />
       </Directory>
     </StandardDirectory>
     <Component Id="ClientPath" Directory="INSTALLFOLDER" Guid="*">
