@@ -33,6 +33,59 @@ function Add-PackageFile([System.Collections.Generic.List[string]]$lines,
     $lines.Add("      mode: $mode")
 }
 
+function Normalize-TermuxDebArchitecture([string]$path) {
+    $ar = (Get-Command ar -ErrorAction SilentlyContinue).Source
+    if (-not $ar) {
+        throw 'The Termux DEB post-processing step requires ar.'
+    }
+
+    $work = Join-Path $scratch 'termux-deb-architecture'
+    Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Path $work | Out-Null
+    Push-Location $work
+    try {
+        & $ar x $path
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to unpack the Termux DEB archive.' }
+
+        $controlDirectory = Join-Path $work 'control'
+        New-Item -ItemType Directory -Path $controlDirectory | Out-Null
+        $controlInput = [IO.File]::OpenRead((Join-Path $work 'control.tar.gz'))
+        $controlGzip = [IO.Compression.GZipStream]::new($controlInput, [IO.Compression.CompressionMode]::Decompress)
+        try {
+            [System.Formats.Tar.TarFile]::ExtractToDirectory($controlGzip, $controlDirectory, $true)
+        }
+        finally {
+            $controlGzip.Dispose()
+            $controlInput.Dispose()
+        }
+
+        $controlPath = Join-Path $controlDirectory 'control'
+        $control = [IO.File]::ReadAllText($controlPath)
+        if (-not $control.Contains("Architecture: arm64")) {
+            throw 'The generated DEB does not contain the expected arm64 architecture field.'
+        }
+        [IO.File]::WriteAllText($controlPath, $control.Replace('Architecture: arm64', 'Architecture: aarch64'))
+        Remove-Item -LiteralPath (Join-Path $work 'control.tar.gz') -Force
+        $controlOutput = [IO.File]::Create((Join-Path $work 'control.tar.gz'))
+        $controlGzip = [IO.Compression.GZipStream]::new($controlOutput, [IO.Compression.CompressionLevel]::SmallestSize)
+        try {
+            [System.Formats.Tar.TarFile]::CreateFromDirectory($controlDirectory, $controlGzip, $false)
+        }
+        finally {
+            $controlGzip.Dispose()
+            $controlOutput.Dispose()
+        }
+
+        $rebuilt = Join-Path $work 'rebuilt.deb'
+        & $ar r $rebuilt 'debian-binary' 'control.tar.gz' 'data.tar.gz'
+        if ($LASTEXITCODE -ne 0) { throw 'Failed to rebuild the Termux DEB archive.' }
+        Move-Item -LiteralPath $rebuilt -Destination $path -Force
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 if ($Target -eq 'ClientApkDebug') {
     $source = Join-Path $repository 'temp/CharacAndroid/bin/Debug/net10.0-android/com.nitload.charac-Signed.apk'
     if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
@@ -89,6 +142,7 @@ if ($Target -eq 'ClientTermuxDeb') {
     $output = Join-Path $packages "charac-termux_${version}-2_aarch64.deb"
     & $NfpmPath package --config $config --packager deb --target $output
     if ($LASTEXITCODE -ne 0) { throw "nFPM failed with exit code $LASTEXITCODE." }
+    Normalize-TermuxDebArchitecture $output
     Write-Output $output
     exit 0
 }
