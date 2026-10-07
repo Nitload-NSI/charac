@@ -10,6 +10,7 @@ namespace Charac.Client;
 internal static class OidcLogin
 {
     private const string TermuxBin = "/data/data/com.termux/files/usr/bin";
+    private const string AndroidAm = "/system/bin/am";
 
     public static async Task<string> LoginAsync(HttpClient client, string issuer, string clientId,
         string discoveryUrl,
@@ -31,6 +32,13 @@ internal static class OidcLogin
             throw new InvalidOperationException("OIDC discovery issuer does not match the Server configuration.");
         var authorize = HttpsEndpoint(metadata.GetProperty("authorization_endpoint").GetString());
         var token = HttpsEndpoint(metadata.GetProperty("token_endpoint").GetString());
+        var deviceAuthorization = metadata.TryGetProperty("device_authorization_endpoint", out var deviceEndpointElement) &&
+            deviceEndpointElement.ValueKind == JsonValueKind.String
+            ? HttpsEndpoint(deviceEndpointElement.GetString())
+            : null;
+
+        if (IsTermux() && deviceAuthorization is not null)
+            return await DeviceLoginAsync(client, issuerUri, deviceAuthorization, token, clientId, cancellationToken);
 
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
@@ -77,8 +85,111 @@ internal static class OidcLogin
         using var tokenResponse = await client.PostAsync(token, body, cancellationToken);
         if (!tokenResponse.IsSuccessStatusCode)
             throw new InvalidOperationException(await DescribeTokenErrorAsync(tokenResponse, cancellationToken));
+        return await ReadAccessTokenAsync(tokenResponse, cancellationToken);
+    }
+
+    private static async Task<string> DeviceLoginAsync(HttpClient client, Uri issuer, Uri deviceAuthorization,
+        Uri tokenEndpoint, string clientId, CancellationToken cancellationToken)
+    {
+        using var deviceRequest = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["client_id"] = clientId,
+            ["scope"] = "openid profile"
+        });
+        using var deviceResponse = await client.PostAsync(deviceAuthorization, deviceRequest, cancellationToken);
+        if (!deviceResponse.IsSuccessStatusCode)
+            throw new InvalidOperationException(await DescribeTokenErrorAsync(deviceResponse, cancellationToken));
+
+        using var deviceDocument = await JsonDocument.ParseAsync(
+            await deviceResponse.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+        var device = deviceDocument.RootElement;
+        var deviceCode = device.GetProperty("device_code").GetString();
+        var userCode = device.GetProperty("user_code").GetString();
+        var verificationUri = device.TryGetProperty("verification_uri_complete", out var completeElement) &&
+            completeElement.ValueKind == JsonValueKind.String
+            ? completeElement.GetString()
+            : device.GetProperty("verification_uri").GetString();
+        var expiresIn = device.GetProperty("expires_in").GetInt32();
+        var interval = device.TryGetProperty("interval", out var intervalElement) &&
+            intervalElement.TryGetInt32(out var configuredInterval)
+            ? Math.Max(configuredInterval, 1)
+            : 5;
+
+        if (string.IsNullOrWhiteSpace(deviceCode) || string.IsNullOrWhiteSpace(userCode) ||
+            string.IsNullOrWhiteSpace(verificationUri) || expiresIn <= 0)
+            throw new InvalidOperationException("OIDC device authorization response was incomplete.");
+
+        if (!Uri.TryCreate(verificationUri, UriKind.Absolute, out var verificationUrl))
+            throw new InvalidOperationException("OIDC verification URL was invalid.");
+        if (string.Equals(verificationUrl.Host, issuer.Host, StringComparison.OrdinalIgnoreCase) &&
+            verificationUrl.Scheme != Uri.UriSchemeHttps)
+        {
+            verificationUrl = new UriBuilder(verificationUrl)
+            {
+                Scheme = Uri.UriSchemeHttps,
+                Port = -1
+            }.Uri;
+        }
+
+        Console.WriteLine("Open this URL to sign in:");
+        WriteTerminalLink(verificationUrl);
+        TryOpenTermuxUrl(verificationUrl);
+        Console.WriteLine($"User code: {userCode}");
+        Console.Write("After completing Authentik login, enter y to continue: ");
+        string? confirmation;
+        try
+        {
+            confirmation = Console.ReadLine();
+        }
+        catch (IOException)
+        {
+            confirmation = null;
+        }
+        catch (InvalidOperationException)
+        {
+            confirmation = null;
+        }
+
+        if (confirmation is null)
+            Console.WriteLine("No interactive stdin is available; continuing to poll for device authorization.");
+        else if (!string.Equals(confirmation.Trim(), "y", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("OIDC device login was cancelled.");
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(expiresIn));
+        var currentInterval = interval;
+        while (true)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(currentInterval), timeout.Token);
+            using var tokenRequest = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
+                ["device_code"] = deviceCode,
+                ["client_id"] = clientId
+            });
+            using var tokenResponse = await client.PostAsync(tokenEndpoint, tokenRequest, timeout.Token);
+            if (tokenResponse.IsSuccessStatusCode)
+                return await ReadAccessTokenAsync(tokenResponse, timeout.Token);
+
+            var error = await ReadOAuthErrorCodeAsync(tokenResponse, timeout.Token);
+            if (error == "authorization_pending")
+                continue;
+            if (error == "slow_down")
+            {
+                currentInterval += 5;
+                continue;
+            }
+            if (error == "expired_token")
+                throw new InvalidOperationException("OIDC device code expired. Start login again.");
+            throw new InvalidOperationException($"OIDC device token exchange failed: {error ?? "unknown_error"}.");
+        }
+    }
+
+    private static async Task<string> ReadAccessTokenAsync(HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
         using var tokenDocument = await JsonDocument.ParseAsync(
-            await tokenResponse.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
+            await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
         if (tokenDocument.RootElement.GetProperty("token_type").GetString() is not { } tokenType ||
             !string.Equals(tokenType, "Bearer", StringComparison.OrdinalIgnoreCase) ||
             tokenDocument.RootElement.GetProperty("access_token").GetString() is not { Length: > 0 } accessToken)
@@ -86,9 +197,51 @@ internal static class OidcLogin
         return accessToken;
     }
 
+    private static void WriteTerminalLink(Uri uri)
+    {
+        var value = uri.ToString();
+        Console.WriteLine($"\u001b]8;;{value}\u0007{value}\u001b]8;;\u0007");
+    }
+
+    private static void TryOpenTermuxUrl(Uri uri)
+    {
+        try
+        {
+            var start = new ProcessStartInfo(TermuxBin + "/termux-open-url") { UseShellExecute = false };
+            start.ArgumentList.Add(uri.ToString());
+            using var process = Process.Start(start);
+            process?.WaitForExit(5000);
+            if (process is null || process.ExitCode != 0)
+                Console.WriteLine("Could not open the browser automatically; use the URL above.");
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        {
+            Console.WriteLine($"Could not open the browser automatically ({exception.Message}); use the URL above.");
+        }
+    }
+
+    private static async Task<string?> ReadOAuthErrorCodeAsync(HttpResponseMessage response,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(
+                await response.Content.ReadAsStringAsync(cancellationToken));
+            return document.RootElement.TryGetProperty("error", out var error) &&
+                error.ValueKind == JsonValueKind.String
+                ? error.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     private static bool IsTermux() =>
         OperatingSystem.IsLinux() &&
-        (Environment.GetEnvironmentVariable("TERMUX_VERSION") is not null ||
+        (File.Exists(Path.Combine(TermuxBin, "termux-open-url")) ||
+         Environment.GetEnvironmentVariable("TERMUX_VERSION") is not null ||
          Environment.GetEnvironmentVariable("PREFIX")?.Contains("/com.termux/", StringComparison.Ordinal) == true);
 
     private static void OpenBrowser(Uri authorizationUri)
@@ -106,23 +259,42 @@ internal static class OidcLogin
 
     private static void StartTermuxBroker(Uri authorizationUri, int port)
     {
+        var brokerUri = new UriBuilder("com.nitload.charac://oauth/start")
+        {
+            Query = $"url={Uri.EscapeDataString(authorizationUri.ToString())}&port={port.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+        }.Uri.ToString();
         try
         {
-            var brokerUri = new UriBuilder("com.nitload.charac://oauth/start")
-            {
-                Query = $"url={Uri.EscapeDataString(authorizationUri.ToString())}&port={port.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
-            }.Uri;
             var start = new ProcessStartInfo(TermuxBin + "/termux-open-url") { UseShellExecute = false };
-            start.ArgumentList.Add(brokerUri.ToString());
+            start.ArgumentList.Add(brokerUri);
             using var process = Process.Start(start);
             process?.WaitForExit(5000);
             if (process is null || process.ExitCode != 0)
-                throw new InvalidOperationException("Termux could not open the Android callback broker.");
+                throw new InvalidOperationException("termux-open-url failed.");
+            return;
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException or System.IO.IOException)
+        {
+            Console.WriteLine($"termux-open-url failed: {exception.Message}; trying Android VIEW intent.");
+        }
+
+        try
+        {
+            var start = new ProcessStartInfo(AndroidAm) { UseShellExecute = false };
+            start.ArgumentList.Add("start");
+            start.ArgumentList.Add("-a");
+            start.ArgumentList.Add("android.intent.action.VIEW");
+            start.ArgumentList.Add("-d");
+            start.ArgumentList.Add(brokerUri);
+            using var process = Process.Start(start);
+            process?.WaitForExit(5000);
+            if (process is null || process.ExitCode != 0)
+                throw new InvalidOperationException("Android VIEW intent failed.");
         }
         catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException or System.IO.IOException)
         {
             Console.WriteLine($"Could not start the Android callback broker: {exception.Message}");
-            Console.WriteLine("Open the URL manually in a browser on this device.");
+            Console.WriteLine("Open the URL manually only after adding com.nitload.charac://oauth/callback to the Authentik provider redirect URIs.");
         }
     }
 

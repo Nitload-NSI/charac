@@ -1,12 +1,14 @@
 # Android CLI 客户端
 
-Termux 登录不让浏览器直接访问 Termux 的 `127.0.0.1`：CLI 通过 `termux-open-url` 启动 APK，APK 注册 `com.nitload.charac://oauth/callback` 并接收 authentik 回调，再用 `RUN_COMMAND` 调用 `charac callback` 将授权码转回 CLI 的本地监听器。
+Termux 主流程使用 OIDC Device Authorization Grant：CLI 打印 verification URL 和 user code，用户在浏览器完成 Authentik 登录后回到 Termux 输入 `y`，CLI 轮询 token endpoint 并继续访问 Server。该流程不需要本机 loopback、Android APK 或自定义 redirect URI。Authentik Provider 必须启用 Device-code grant，并在 discovery 中提供 `device_authorization_endpoint`。
+
+Android APK 只作为可选的自定义 URI 回调桥，兼容旧的 `com.nitload.charac://oauth/callback` 流程，不是 Termux CLI 的运行前提。若使用该桥，Authentik Provider 仍必须允许精确 redirect URI `com.nitload.charac://oauth/callback`。
 
 推荐把 Android CLI 作为 Termux DEB 分发，而不是把 CLI 当成普通 Android APK。**当前 Termux DEB 已标记为不可用，暂不作为交付包；下面的安装步骤仅保留用于后续修复和设备验收。** APK 只是可选的 One UI 启动器：它不能单独运行 CLI，必须与 Termux、Termux DEB、运行命令权限和 `allow-external-apps=true` 配置一起使用。直接安装 APK 后点击图标不能替代 Termux 环境，也不会自动安装 .NET 或 `charac`。
 
-Android 首期支持 ARM64 设备上的 Termux 终端，CLI 使用 `linux-bionic-arm64` RID。当前 DEB 在真实 Termux 环境不可用，不能宣称安装后可运行；另有独立的 .NET Android 启动器项目 `src/android/CharacAndroid.csproj`，包 ID 为 `com.nitload.charac`；Server 仍只部署在 Windows 或 Linux。
+Android 首期支持 ARM64 设备上的 Termux 终端，CLI 使用 `linux-bionic-arm64` RID。当前 DEB 已加入 Device Flow 实现，但尚未完成真实 Termux/三星设备验收，仍属于候选包；另有独立的 .NET Android 启动器项目 `src/android/CharacAndroid.csproj`，包 ID 为 `com.nitload.charac`；Server 仍只部署在 Windows 或 Linux。
 
-执行 `./build.ps1 --target Publish --runtime linux-bionic-arm64 --locked-restore`，或在 Linux 上使用 `bash ./build.sh`。随后运行 `./packaging/package.ps1 -Target ClientTermuxDeb`，可生成 `artifacts/packages/<版本>/charac-termux_<版本>-2_aarch64.deb`，但当前包已知不可用，不应安装到生产设备或作为 Release 可用资产。修复前不把 DEB 标记为可交付；APK 的环境检查也不能视为 CLI 已可用。
+执行 `./build.ps1 --target Publish --runtime linux-bionic-arm64 --locked-restore`，或在 Linux 上使用 `bash ./build.sh`。随后运行 `./packaging/package.ps1 -Target ClientTermuxDeb`，生成 `artifacts/packages/<版本>/charac-termux_<版本>-2_aarch64.deb`。当前包是 Device Flow 候选包，必须完成真实设备登录、轮询和交互验收后才能标记为可交付；APK 的环境检查也不能替代 CLI 验收。
 
 如果暂时不使用 DEB，也可以复制 `artifacts/publish/linux-bionic-arm64/client/` 到 Termux 私有目录，例如 `$HOME/.local/opt/charac`；该目录是 framework-dependent 发布，需要先安装 Termux 的 `dotnet-runtime-10.0`。为 APK 提供固定入口 `$PREFIX/bin/charac`，其内容用 Termux 的 `sh` 调用 `dotnet $HOME/.local/opt/charac/charac.dll` 并原样传递参数；入口必须可执行。
 

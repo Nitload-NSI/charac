@@ -24,15 +24,20 @@ internal sealed class WindowsTerminalInputMode : IDisposable
     private readonly uint _originalInputMode;
     private readonly nint _outputHandle;
     private readonly uint _originalOutputMode;
+    private readonly uint _originalInputCodePage;
+    private readonly uint _originalOutputCodePage;
     private bool _disposed;
 
     private WindowsTerminalInputMode(nint inputHandle, uint originalInputMode,
-        nint outputHandle, uint originalOutputMode)
+        nint outputHandle, uint originalOutputMode, uint originalInputCodePage,
+        uint originalOutputCodePage)
     {
         _inputHandle = inputHandle;
         _originalInputMode = originalInputMode;
         _outputHandle = outputHandle;
         _originalOutputMode = originalOutputMode;
+        _originalInputCodePage = originalInputCodePage;
+        _originalOutputCodePage = originalOutputCodePage;
     }
 
     public static WindowsTerminalInputMode? TryEnable()
@@ -45,6 +50,8 @@ internal sealed class WindowsTerminalInputMode : IDisposable
             !GetConsoleMode(inputHandle, out var inputMode) ||
             !GetConsoleMode(outputHandle, out var outputMode))
             return null;
+        var originalInputCodePage = GetConsoleCP();
+        var originalOutputCodePage = GetConsoleOutputCP();
 
         var virtualTerminalOutput = outputMode | ProcessedOutput | VirtualTerminalOutput |
             DisableNewlineAutoReturn;
@@ -58,7 +65,16 @@ internal sealed class WindowsTerminalInputMode : IDisposable
             _ = SetConsoleMode(outputHandle, outputMode);
             throw new Win32Exception(error, "Could not enable terminal mouse input.");
         }
-        return new WindowsTerminalInputMode(inputHandle, inputMode, outputHandle, outputMode);
+        if (!SetConsoleCP(65001) || !SetConsoleOutputCP(65001))
+        {
+            _ = SetConsoleMode(inputHandle, inputMode);
+            _ = SetConsoleMode(outputHandle, outputMode);
+            _ = SetConsoleCP(originalInputCodePage);
+            _ = SetConsoleOutputCP(originalOutputCodePage);
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not enable UTF-8 console code page.");
+        }
+        return new WindowsTerminalInputMode(inputHandle, inputMode, outputHandle, outputMode,
+            originalInputCodePage, originalOutputCodePage);
     }
 
     public void Dispose()
@@ -68,6 +84,8 @@ internal sealed class WindowsTerminalInputMode : IDisposable
         _disposed = true;
         _ = SetConsoleMode(_inputHandle, _originalInputMode);
         _ = SetConsoleMode(_outputHandle, _originalOutputMode);
+        _ = SetConsoleCP(_originalInputCodePage);
+        _ = SetConsoleOutputCP(_originalOutputCodePage);
     }
 
     public static void ResetTerminalState(bool leaveAlternateScreen = false)
@@ -106,6 +124,20 @@ internal sealed class WindowsTerminalInputMode : IDisposable
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetConsoleMode(nint consoleHandle, uint mode);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint GetConsoleCP();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint GetConsoleOutputCP();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetConsoleCP(uint codePage);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetConsoleOutputCP(uint codePage);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

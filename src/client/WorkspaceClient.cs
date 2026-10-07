@@ -238,7 +238,7 @@ internal static class WorkspaceClient
             deviceCredential: deviceCredential);
         await SendResizeAsync(socket, GetConsoleSize(), CancellationToken.None);
 
-        using var terminalInput = WindowsTerminalInputMode.TryEnable();
+        using var terminalInput = TryEnableTerminalInput();
         var previousControlC = Console.TreatControlCAsInput;
         Console.TreatControlCAsInput = true;
         using var closing = new CancellationTokenSource();
@@ -454,6 +454,11 @@ internal static class WorkspaceClient
             return [(byte)(key.Key - ConsoleKey.A + 1)];
         return [];
     }
+
+    private static IDisposable? TryEnableTerminalInput() =>
+        OperatingSystem.IsWindows()
+            ? WindowsTerminalInputMode.TryEnable()
+            : UnixTerminalInputMode.TryEnable();
 
     private static (int Columns, int Rows) GetConsoleSize()
     {
