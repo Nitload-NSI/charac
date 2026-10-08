@@ -135,7 +135,7 @@ internal static class OidcLogin
         WriteTerminalLink(verificationUrl);
         TryOpenTermuxUrl(verificationUrl);
         Console.WriteLine($"User code: {userCode}");
-        Console.Write("After completing Authentik login, enter y to continue: ");
+        Console.Write("After completing identity provider login, enter y to continue: ");
         string? confirmation;
         try
         {
@@ -294,7 +294,7 @@ internal static class OidcLogin
         catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException or System.IO.IOException)
         {
             Console.WriteLine($"Could not start the Android callback broker: {exception.Message}");
-            Console.WriteLine("Open the URL manually only after adding com.nitload.charac://oauth/callback to the Authentik provider redirect URIs.");
+            Console.WriteLine("Open the URL manually only after adding com.nitload.charac://oauth/callback to the OIDC provider redirect URIs.");
         }
     }
 

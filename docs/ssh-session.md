@@ -102,7 +102,7 @@ host_public_key="ssh-ed25519 AAAA..."
 
 运行 `dotnet run --no-launch-profile --project src/server -- --config workspace-access.config ssh broker-probe`，会进一步测试数据库授权解析和真实 Broker。此命令只允许连接库名含 `test` 的专用 PostgreSQL 测试库；它会保存启用的测试身份、目标、主机公钥和授权，打印四条记录的 ID 后再要求输入 SSH 密码。随后通过 `SshWorkspaceManager` 向 Linux Shell 发送 `ls`，读取返回列表并检查退出码为 0；即使 SSH 连接失败，诊断记录也会保留。每次运行新增一组记录，可用 `database list-probes` 查看，用 `database clear-probes` 清理专用测试库中的诊断记录；这两个命令保留 EF 迁移与非诊断数据。测试库须先应用 EF 迁移。成功输出 `Database authorization, host key, password, managed session and Linux ls verified.`。2026-10-02 已在 `.100` 上使用此命令连接 `.101`，读回目录列表并验证 `ls` 退出码为 0。虚拟身份只用于本机测试，不代表 OIDC 已通过，也不对公网开放。两个命令仍支持显式传入地址、端口、账户、公钥的旧形式。
 
-要继续验收 OIDC + WebSocket，先配置[authentik 登记](authentication.md)，再在一个终端启动 Server。在另一个终端依次运行以下命令；`<target-id>` 用 `broker-probe` 打印的值，`<issuer>` 与 `<subject>` 用 `whoami` 打印的值。`grant-probe` 是本机管理命令，只能对专用测试库中的诊断目标授权：
+要继续验收 OIDC + WebSocket，先按[身份认证](authentication.md)配置兼容的身份提供方，再在一个终端启动 Server。在另一个终端依次运行以下命令；`<target-id>` 用 `broker-probe` 打印的值，`<issuer>` 与 `<subject>` 用 `whoami` 打印的值。`grant-probe` 是本机管理命令，只能对专用测试库中的诊断目标授权：
 
 ```powershell
 dotnet run --project src/server -- --config workspace-access.config
@@ -111,7 +111,7 @@ dotnet run --project src/server -- --config workspace-access.config database gra
 dotnet run --project src/client -- run --server http://127.0.0.1:5080 --target <target-id>
 ```
 
-最后一条命令会重新通过 authentik 登录、交互输入 SSH 密码、创建工作区、通过 WebSocket 发送 `ls` 并显示输出及工作区 ID。使用 `attach --server http://127.0.0.1:5080 --id <workspace-id>` 可再次登录并附着同一工作区，继续发送 `ls`。目录列表应与在 `.101` 上用对应系统账户直接运行 `ls` 的结果对照；CLI 同时检查 Shell 返回的退出码为 0。退出 CLI 后工作区仍在 Server 内，直到后端 Shell 结束、显式 DELETE 或 Server 停止。
+最后一条命令会重新通过 OIDC 登录，交互输入 SSH 密码，创建工作区并通过 WebSocket 发送 `ls`，显示输出及工作区 ID。使用 `attach --server http://127.0.0.1:5080 --id <workspace-id>` 可再次登录并附着同一工作区，继续发送 `ls`。目录列表应与在 `.101` 上用对应系统账户直接运行 `ls` 的结果对照；CLI 同时检查 Shell 返回的退出码为 0。退出 CLI 后工作区仍在 Server 内，直到后端 Shell 结束、显式 DELETE 或 Server 停止。
 
 ## 多目标与生命周期
 

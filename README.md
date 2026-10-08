@@ -4,13 +4,13 @@
 
 ## 目标架构
 
-客户端通过 authentik OIDC 登录，经 HTTPS/WebSocket 连接 Server。Server 校验身份与目标系统账户映射，使用后端 SSH 凭据连接内网 Windows 或 Linux 的 `sshd`。Session Manager 持有每个工作区的 SSH 连接，客户端断线只解除附着；Server 持续消费输出，同一身份重连时重新附着。Windows OpenSSH 负责 ConPTY 和用户 Shell，Linux OpenSSH 负责 POSIX PTY。
+客户端通过兼容 OpenID Connect 的身份提供方登录，经 HTTPS/WebSocket 连接 Server。Server 校验身份与目标系统账户映射，使用后端 SSH 凭据连接内网 Windows 或 Linux 的 `sshd`。Session Manager 持有每个工作区的 SSH 连接，客户端断线只解除附着；Server 持续消费输出，同一身份重连时重新附着。Windows OpenSSH 负责 ConPTY 和用户 Shell，Linux OpenSSH 负责 POSIX PTY。
 
 SSH CA 是后端凭据的可选方案；正式用户登录使用 OIDC。首期工作区在 Server 与后端 SSH 连接存活期间持续运行；Server 重启或后端 SSH 断线后的恢复另行验收。
 
 ## 当前状态
 
-当前已实现 Server 服务入口、EF Core/PostgreSQL 授权、OIDC 令牌校验、托管私钥及密码 SSH Broker、Session Manager 与 WebSocket；Client 提供 `login` 登录验证及 `connect` 的资源选择、交互创建/重新附着。正式 Client 已在 `.100 → .101` 环境通过 authentik 登录、目标选择和交互式 `ls`；自动重连和画面恢复仍待完善。`/health/live` 返回 200，`/health/ready` 返回 503，检查真实数据库状态并列出待集成项，数据库配置与迁移见[数据库文档](docs/database.md)。
+当前已实现 Server 服务入口、EF Core/PostgreSQL 授权、OIDC 令牌校验、托管私钥及密码 SSH Broker、Session Manager 与 WebSocket；Client 提供 `login` 登录验证及 `connect` 的资源选择、交互创建/重新附着。正式 Client 已在 `.100 → .101` 环境通过 authentik 登录、目标选择和交互式 `ls`；authentik 是当前已实测的身份提供方，设计使用标准 OIDC；自动重连和画面恢复仍待完善。`/health/live` 返回 200，`/health/ready` 返回 503，检查真实数据库状态并列出待集成项，数据库配置与迁移见[数据库文档](docs/database.md)。
 
 ## 构建与运行
 

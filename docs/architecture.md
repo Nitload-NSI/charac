@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart LR
-    Client[CLI] -->|OIDC| Auth[authentik]
+    Client[CLI] -->|OIDC| Auth[OpenID Connect Provider]
     Client -->|HTTPS / WebSocket| Server[Workspace Access Server]
     Server --> Policy[授权与账户映射]
     Policy --> Manager[Session Manager]
@@ -20,7 +20,7 @@ Server 对每个工作区持有一条后端 SSH 会话。WebSocket 只是客户�
 
 解决方案包含 `src/server/WorkspaceAccessServer.csproj`、`src/client/WorkspaceAccessClient.csproj`、`tests/WorkspaceAccessServer.Tests` 和 `build/Build.csproj`。Server 的 `Authentication/` 放 OIDC 配置、身份模型与授权解析，`Connections/` 放工作区控制权，`Hosting/` 放 HTTP/WebSocket 入口。`Ssh/` 已实现密码及托管私钥 SSH Broker、主机公钥校验、Session Manager 和本机诊断命令；SSH CA 与密钥实机验收仍待完成，详见[SSH 会话设计](ssh-session.md)。
 
-CLI 的 `login` 和 `connect` 通过单一域名发现 OIDC 配置，复用 PKCE 浏览器登录与回调页，并让 Server 验证身份；`connect` 从受保护的 `/resources` 取得当前授权目标及会话状态，选择后按目标或会话 ID 的 query 建立正式 WebSocket 交互；也支持直接指定 ID。原有一次性 Linux `ls` 命令继续用于诊断。正式 Client 的真实 authentik 登录、Server 身份验证及 `.100 → .101` 交互式 `ls` 已实测，见[单域名入口](client-server-transport.md)。Caddy 等反向代理可承接公网 TLS 入口；内网 `sshd` 只允许 Server 访问。Windows OpenSSH 已使用 ConPTY，因此 Server 不再自己启动 `pwsh.exe` 或实现平台 PTY。
+CLI 的 `login` 和 `connect` 通过单一域名发现 OIDC 配置，复用 PKCE 浏览器登录与回调页，并让 Server 验证身份；`connect` 从受保护的 `/resources` 取得当前授权目标及会话状态，选择后按目标或会话 ID 的 query 建立正式 WebSocket 交互；也支持直接指定 ID。原有一次性 Linux `ls` 命令继续用于诊断。正式 Client 已使用 authentik 完成真实登录、Server 身份验证及 `.100 → .101` 交互式 `ls` 验收；authentik 是当前实测提供方，不是实现限定，见[单域名入口](client-server-transport.md)。Caddy 等反向代理可承接公网 TLS 入口；内网 `sshd` 只允许 Server 访问。Windows OpenSSH 已使用 ConPTY，因此 Server 不再自己启动 `pwsh.exe` 或实现平台 PTY。
 
 ## 信任与生命周期
 

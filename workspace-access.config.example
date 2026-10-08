@@ -6,10 +6,10 @@ listen=http://127.0.0.1:5080
 ; If Caddy is the direct peer, set its numeric IP to trust one X-Forwarded-For hop.
 ; trusted_proxy=127.0.0.1
 
-; Fill these only after creating a public PKCE OAuth2/OpenID provider in authentik.
+; Fill these only after creating a public client in an OIDC provider with PKCE enabled.
 ; [oidc]
 ; issuer=https://auth.example.com/application/o/workspace-access/
-; client_id=<authentik-client-id>
+; client_id=<oidc-client-id>
 ; discovery_url=https://auth.example.com/application/o/workspace-access/.well-known/openid-configuration
 
 ; Local same-service-account control channel. Enable user disconnection only for an isolated service account.

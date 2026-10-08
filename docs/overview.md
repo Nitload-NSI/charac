@@ -2,7 +2,7 @@
 
 ## 产品目标
 
-Workspace Access Server 管理 Windows 与 Linux 上的远程 SSH 工作区。外部用户经 authentik OIDC 登录；Server 按经过验证的外部身份授权目标机器和系统账户，连接只在内网可达的 OpenSSH Server。对外接口为 HTTPS/WebSocket，客户端不直接接触目标 `sshd`。
+Workspace Access Server 管理 Windows 与 Linux 上的远程 SSH 工作区。外部用户经兼容 OpenID Connect（OIDC）的身份提供方登录；Server 按经过验证的外部身份授权目标机器和系统账户，连接只在内网可达的 OpenSSH Server。对外接口为 HTTPS/WebSocket，客户端不直接接触目标 `sshd`。当前已使用 authentik 完成端到端验收。
 
 Windows OpenSSH 提供 ConPTY 与用户 Shell，Linux OpenSSH 提供 POSIX PTY 与用户 Shell。Server 负责 SSH 信任、连接控制、工作区归属与输出保持，不自行实现平台 PTY 或用户代理。
 
@@ -10,7 +10,7 @@ Windows OpenSSH 提供 ConPTY 与用户 Shell，Linux OpenSSH 提供 POSIX PTY �
 
 | 功能 | 目标行为 |
 | --- | --- |
-| 身份 | authentik 负责 OIDC；操作系统负责系统账户与文件权限 |
+| 身份 | OIDC 身份提供方负责用户认证；操作系统负责系统账户与文件权限 |
 | 映射 | 以 `(issuer, subject)` 标识外部身份，管理员授权目标机器和系统账户 |
 | SSH 信任 | Server 管理后端 SSH 凭据并校验目标主机密钥；SSH CA 是可选实现方式 |
 | 外部传输 | CLI 经 HTTPS 登录、经 WebSocket 附着工作区 |

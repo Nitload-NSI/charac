@@ -1,8 +1,8 @@
 # Android CLI 客户端
 
-Termux 主流程使用 OIDC Device Authorization Grant：CLI 打印 verification URL 和 user code，用户在浏览器完成 Authentik 登录后回到 Termux 输入 `y`，CLI 轮询 token endpoint 并继续访问 Server。该流程不需要本机 loopback、Android APK 或自定义 redirect URI。Authentik Provider 必须启用 Device-code grant，并在 discovery 中提供 `device_authorization_endpoint`。
+Termux 主流程使用 OIDC Device Authorization Grant：CLI 打印 verification URL 和 user code，用户在浏览器完成身份提供方登录后回到 Termux 输入 `y`，CLI 轮询 token endpoint 并继续访问 Server。该流程不需要本机 loopback、Android APK 或自定义 redirect URI。Provider 必须支持 Device Authorization Grant，并在 discovery 文档中提供 `device_authorization_endpoint`；当前此路径以 authentik 完成过配置验证，Termux 实机流程仍待验收。
 
-Android APK 只作为可选的自定义 URI 回调桥，兼容旧的 `com.nitload.charac://oauth/callback` 流程，不是 Termux CLI 的运行前提。若使用该桥，Authentik Provider 仍必须允许精确 redirect URI `com.nitload.charac://oauth/callback`。
+Android APK 只作为可选的自定义 URI 回调桥，兼容旧的 `com.nitload.charac://oauth/callback` 流程，不是 Termux CLI 的运行前提。若使用该桥，OIDC Provider 必须允许精确 redirect URI `com.nitload.charac://oauth/callback`。不支持 Device Authorization Grant 的 Provider 可在支持此 redirect URI 时通过回调桥使用 Authorization Code + PKCE。
 
 推荐把 Android CLI 作为 Termux DEB 分发，而不是把 CLI 当成普通 Android APK。**当前 Termux DEB 已标记为不可用，暂不作为交付包；下面的安装步骤仅保留用于后续修复和设备验收。** APK 只是可选的 One UI 启动器：它不能单独运行 CLI，必须与 Termux、Termux DEB、运行命令权限和 `allow-external-apps=true` 配置一起使用。直接安装 APK 后点击图标不能替代 Termux 环境，也不会自动安装 .NET 或 `charac`。
 

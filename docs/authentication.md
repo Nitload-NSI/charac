@@ -1,15 +1,12 @@
 # 身份认证与授权
 
-桌面 Client 使用动态 loopback URI `http://127.0.0.1:<动态端口>/callback`；Termux
-Client 使用 `com.nitload.charac://oauth/callback`，由 Android APK 接收 authentik
-回调，再通过 Termux `RUN_COMMAND` 转回 CLI。authentik Provider 必须同时允许这两类
-Redirect URI。
+认证使用标准 OpenID Connect（OIDC）发现、OAuth 2.0 Authorization Code + PKCE 和 JWT Bearer 验证。桌面 Client 使用动态 loopback URI `http://127.0.0.1:<动态端口>/callback`；Termux Client 可使用 OIDC Device Authorization Grant，或使用 `com.nitload.charac://oauth/callback` 并由 Android APK 接收回调，再通过 Termux `RUN_COMMAND` 转回 CLI。身份提供方须支持对应授权流和客户端类型，并允许所选流程需要的 redirect URI。authentik 是当前已实测的提供方，不是设计或实现的供应商限制。
 
-CLI 已实现 authentik OIDC Authorization Code + PKCE 的浏览器登录和本机回调；令牌仅保存在当前 CLI 进程内。Server 使用 JWT Bearer 中间件从 HTTPS OIDC discovery 获取签名密钥，校验签名、issuer、audience 和有效期，再以稳定的 `(iss, sub)` 识别用户。资源列表、创建、附着、结束工作区均重新查询数据库授权。需在 authentik 创建 public client、启用 PKCE、设置允许的 `http://127.0.0.1:<动态端口>/callback` 回调，并为 Provider 配置非对称 JWT 签名密钥。Server 配置 `[oidc] issuer` 和 `client_id`；若采用 authentik 的全局 issuer 模式，还需设置指向应用 slug 下 discovery 文档的 `discovery_url`。正式 Client 的 `login` 已通过真实 authentik 浏览器登录及 Server 令牌校验；2026-10-05 已在 `.100 → .101` 实测目标授权、资源选择和交互式 `ls`；正常退出及重新附着待复测。
+CLI 已实现基于 OIDC discovery 的 Authorization Code + PKCE 浏览器登录和本机回调；令牌仅保存在当前 CLI 进程内。Server 使用 JWT Bearer 中间件从 HTTPS OIDC discovery 获取签名密钥，校验签名、issuer、audience 和有效期，再以稳定的 `(iss, sub)` 识别用户。Provider 应支持 public client、PKCE、`openid` scope、可验证的签名 JWT access token（audience 与 `[oidc] client_id` 一致）及 OIDC discovery；资源列表、创建、附着、结束工作区均重新查询数据库授权。Server 配置 `[oidc] issuer` 和 `client_id`；默认 discovery 地址为 `{issuer}/.well-known/openid-configuration`，不符合此路径时可通过 `discovery_url` 显式指定。正式 Client 的 `login` 已通过 authentik 浏览器登录及 Server 令牌校验；2026-10-05 已在 `.100 → .101` 实测目标授权、资源选择和交互式 `ls`；正常退出及重新附着待复测。
 
 管理员将外部身份映射到允许访问的目标机器和系统账户。Windows 目标使用账户 SID，Linux 目标使用 UID/GID；实际登录环境及文件权限由目标 sshd 和操作系统建立。不同外部身份即使映射到同一个系统账户，工作区归属仍独立。
 
-Server 当前的 `access.identities` 只保存 `(issuer, subject)` 身份键和启用状态，并不保存用户资料。若未来加入本地易读名称，应命名为 **user label**，仅供管理员识别和显示；标签不能作为认证或授权依据，也不能声称是从身份平台实时同步的资料。姓名、邮箱等真正的用户资料由 authentik 或其他 OIDC Provider 管理；Server 不直接读取 authentik 的 PostgreSQL。正式 Client 的 `login` 和 `connect` 使用相同的浏览器登录与回调页。具体命令见[正式 Client 流程](client-server-transport.md)。
+Server 当前的 `access.identities` 只保存 `(issuer, subject)` 身份键和启用状态，并不保存用户资料。若未来加入本地易读名称，应命名为 **user label**，仅供管理员识别和显示；标签不能作为认证或授权依据，也不能声称是从身份平台实时同步的资料。姓名、邮箱等用户资料由所接入的身份提供方管理；Server 不直接读取身份提供方的数据库。正式 Client 的 `login` 和 `connect` 使用相同的浏览器登录与回调页。具体命令见[正式 Client 流程](client-server-transport.md)。
 
 当前建连支持 Server 托管的 SSH 登录私钥或一次性输入的 SSH 密码，两者均继续验证数据库中登记的目标主机公钥。密钥授权不要求 Client 提供 SSH 密码；密码授权的密码在 HTTPS 请求体中传给 Server，不写入数据库或日志。私钥内容只保存在服务账户可访问的文件中，数据库保存引用。目标 sshd 只在内网对 Server 开放。正式用户登录只使用 OIDC；SSH CA 仍是可选的后端凭据方案，不是用户登录步骤。
 
@@ -21,13 +18,13 @@ Server 当前的 `access.identities` 只保存 `(issuer, subject)` 身份键和�
 
 ## 当前测试库中的 OIDC 登记
 
-先在 authentik 创建 OAuth2/OpenID Provider：使用 public client、Authorization Code + PKCE、`openid` scope、非对称签名密钥，允许 CLI 的 loopback 回调。动态端口可在 Redirect URIs 中配置为正则 `^http://127\.0\.0\.1:[0-9]+/callback$`；具体选项见[authentik OAuth2 Provider 文档](https://docs.goauthentik.io/add-secure-apps/providers/oauth2/)。在根目录的 `workspace-access.config` 加入：
+以下配置以当前已实测的 authentik 为例；其他兼容 OIDC 的身份提供方也可使用，但须满足上文列出的授权流、JWT 和 discovery 要求。先创建 public client，启用 Authorization Code + PKCE、`openid` scope 和非对称签名密钥，并允许 CLI 的 loopback 回调。动态端口可在 authentik Redirect URIs 中配置为正则 `^http://127\.0\.0\.1:[0-9]+/callback$`；具体选项见[authentik OAuth2 Provider 文档](https://docs.goauthentik.io/add-secure-apps/providers/oauth2/)。在根目录的 `workspace-access.config` 加入：
 
 ```ini
 [oidc]
 issuer=https://auth.example.com/application/o/workspace-access/
-client_id=<authentik-client-id>
-; 只有 discovery 文档不在 issuer 下时才填写，例如 authentik 全局 issuer 模式
+client_id=<oidc-client-id>
+; 只有 discovery 文档不在 issuer 下时才填写；authentik 全局 issuer 模式需要显式指定
 ; discovery_url=https://auth.example.com/application/o/workspace-access/.well-known/openid-configuration
 ```
 

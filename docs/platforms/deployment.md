@@ -19,11 +19,11 @@ $env:NuGetAudit='false'
 
 ## Server RPM 首次部署前提
 
-这套部署复用现有 authentik、PostgreSQL、Caddy 和内网 sshd，不需要在 Server RPM 内再部署一套身份平台。安装包只装程序、systemd 单元和非 root 服务账户，不会自动填入生产配置、创建数据库、配置反向代理或向目标 sshd 登记公钥。首次上线按下列顺序准备：
+当前示例部署复用现有 authentik、PostgreSQL、Caddy 和内网 sshd；authentik 只是已实测的 OIDC Provider，Server 不绑定特定身份平台，也不需要在 RPM 内再部署身份平台。安装包只装程序、systemd 单元和非 root 服务账户，不会自动填入生产配置、创建数据库、配置反向代理或向目标 sshd 登记公钥。首次上线按下列顺序准备：
 
-1. 确认 Server 主机能访问 PostgreSQL、authentik 的 OIDC discovery/JWKS，以及内网各目标的 SSH 端口；公网只暴露 Caddy 的 HTTPS 入口，不暴露 PostgreSQL 和目标 SSH。
+1. 确认 Server 主机能访问 PostgreSQL、所选 OIDC Provider 的 HTTPS discovery/JWKS 端点，以及内网各目标的 SSH 端口；公网只暴露 Caddy 的 HTTPS 入口，不暴露 PostgreSQL 和目标 SSH。
 2. 在 PostgreSQL 创建专用数据库和受限角色。安装 RPM 后将配置写入 `/etc/charac/workspace-access.config`，填 `[database]`、`[oidc]`、`[server]` 和 `[ssh_keys]`；文件只允许 `charac` 服务账户读取。用同一配置执行 `char_rac_server --config /etc/charac/workspace-access.config database migrate`，然后核对迁移结果。服务正常启动不会自动迁移。
-3. 在 authentik 为 CLI 准备 public OIDC Provider，启用 PKCE 和本机动态 loopback 回调；Server 配置正确的 issuer、client ID 和 discovery URL。详情见[认证](../authentication.md)。
+3. 在 OIDC Provider 为 CLI 准备 public client，启用 Authorization Code + PKCE 和本机动态 loopback 回调；Server 配置正确的 issuer、client ID 和 discovery URL。authentik 配置可参阅[认证](../authentication.md)中的当前示例。
 4. 创建服务账户持有的 `/var/lib/charac/keys`（目录 `0700`，私钥 `0600`），从可信渠道核对目标 sshd 主机公钥。使用本机 `endpoint_regist` 导入 Server 登录私钥、登记目标，并授权 OIDC subject 到目标 OS 账户；目标账户的 `authorized_keys` 也须信任相应登录公钥。详情见[SSH 登记](../ssh-session.md#三参数交互式端点登记)。
 5. 配置 Caddy 的域名、TLS 和到 Server 监听地址的反向代理；需要读取真实客户端 IP 时再设置 `[server] trusted_proxy`。最后启动 `charac-server.service`，检查 `systemctl status` 与 `journalctl -u charac-server`，再从 Client 完成真实登录和 SSH 连接。
 

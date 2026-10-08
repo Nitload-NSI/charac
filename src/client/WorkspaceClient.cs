@@ -199,7 +199,7 @@ internal static class WorkspaceClient
         using var response = passwordResponse;
         var result = response ?? initial;
         if (result.StatusCode == HttpStatusCode.Forbidden)
-            throw new InvalidOperationException("This authentik identity has no enabled grant for the target.");
+            throw new InvalidOperationException("This OIDC identity has no enabled grant for the target.");
         if (result.StatusCode == HttpStatusCode.Conflict)
             throw new InvalidOperationException("This identity is already connected from another Client installation.");
         result.EnsureSuccessStatusCode();
