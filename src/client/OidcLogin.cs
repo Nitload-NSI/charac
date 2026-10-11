@@ -12,7 +12,7 @@ internal static class OidcLogin
     private const string TermuxBin = "/data/data/com.termux/files/usr/bin";
     private const string AndroidAm = "/system/bin/am";
 
-    public static async Task<string> LoginAsync(HttpClient client, string issuer, string clientId,
+    public static async Task<OidcTokenSet> LoginAsync(HttpClient client, string issuer, string clientId,
         string discoveryUrl,
         CancellationToken cancellationToken = default)
     {
@@ -55,7 +55,7 @@ internal static class OidcLogin
             ["response_type"] = "code",
             ["client_id"] = clientId,
             ["redirect_uri"] = redirectUri,
-              ["scope"] = "openid profile",
+                        ["scope"] = "openid profile offline_access",
             ["state"] = state,
             ["code_challenge"] = challenge,
             ["code_challenge_method"] = "S256"
@@ -85,16 +85,16 @@ internal static class OidcLogin
         using var tokenResponse = await client.PostAsync(token, body, cancellationToken);
         if (!tokenResponse.IsSuccessStatusCode)
             throw new InvalidOperationException(await DescribeTokenErrorAsync(tokenResponse, cancellationToken));
-        return await ReadAccessTokenAsync(tokenResponse, cancellationToken);
+        return await ReadTokenSetAsync(tokenResponse, cancellationToken);
     }
 
-    private static async Task<string> DeviceLoginAsync(HttpClient client, Uri issuer, Uri deviceAuthorization,
+    private static async Task<OidcTokenSet> DeviceLoginAsync(HttpClient client, Uri issuer, Uri deviceAuthorization,
         Uri tokenEndpoint, string clientId, CancellationToken cancellationToken)
     {
         using var deviceRequest = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["client_id"] = clientId,
-            ["scope"] = "openid profile"
+            ["scope"] = "openid profile offline_access"
         });
         using var deviceResponse = await client.PostAsync(deviceAuthorization, deviceRequest, cancellationToken);
         if (!deviceResponse.IsSuccessStatusCode)
@@ -169,7 +169,7 @@ internal static class OidcLogin
             });
             using var tokenResponse = await client.PostAsync(tokenEndpoint, tokenRequest, timeout.Token);
             if (tokenResponse.IsSuccessStatusCode)
-                return await ReadAccessTokenAsync(tokenResponse, timeout.Token);
+                return await ReadTokenSetAsync(tokenResponse, timeout.Token);
 
             var error = await ReadOAuthErrorCodeAsync(tokenResponse, timeout.Token);
             if (error == "authorization_pending")
@@ -185,7 +185,23 @@ internal static class OidcLogin
         }
     }
 
-    private static async Task<string> ReadAccessTokenAsync(HttpResponseMessage response,
+    public static async Task<OidcTokenSet> RefreshAsync(HttpClient client, Uri tokenEndpoint,
+        string clientId, string refreshToken, CancellationToken cancellationToken = default)
+    {
+        using var body = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token",
+            ["client_id"] = clientId,
+            ["refresh_token"] = refreshToken
+        });
+        using var response = await client.PostAsync(tokenEndpoint, body, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException(await DescribeTokenErrorAsync(response, cancellationToken));
+        var refreshed = await ReadTokenSetAsync(response, cancellationToken);
+        return refreshed with { RefreshToken = refreshed.RefreshToken ?? refreshToken };
+    }
+
+    private static async Task<OidcTokenSet> ReadTokenSetAsync(HttpResponseMessage response,
         CancellationToken cancellationToken)
     {
         using var tokenDocument = await JsonDocument.ParseAsync(
@@ -194,7 +210,11 @@ internal static class OidcLogin
             !string.Equals(tokenType, "Bearer", StringComparison.OrdinalIgnoreCase) ||
             tokenDocument.RootElement.GetProperty("access_token").GetString() is not { Length: > 0 } accessToken)
             throw new InvalidOperationException("OIDC token response did not contain a bearer access token.");
-        return accessToken;
+        var expiresIn = tokenDocument.RootElement.TryGetProperty("expires_in", out var expiresElement) &&
+            expiresElement.TryGetInt32(out var seconds) ? seconds : 300;
+        var refreshToken = tokenDocument.RootElement.TryGetProperty("refresh_token", out var refreshElement) &&
+            refreshElement.ValueKind == JsonValueKind.String ? refreshElement.GetString() : null;
+        return new(accessToken, refreshToken, DateTimeOffset.UtcNow.AddSeconds(Math.Max(30, expiresIn)));
     }
 
     private static void WriteTerminalLink(Uri uri)

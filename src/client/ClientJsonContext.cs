@@ -14,6 +14,7 @@ internal sealed record InputFrame(string Type, string Data);
 [JsonSerializable(typeof(PasswordSessionRequest))]
 [JsonSerializable(typeof(ResizeFrame))]
 [JsonSerializable(typeof(InputFrame))]
+[JsonSerializable(typeof(OidcSessionFile))]
 internal partial class ClientJsonContext : JsonSerializerContext
 {
 }

@@ -6,7 +6,8 @@ internal sealed record ResourceTarget(Guid Id, string Name, string Account);
 internal sealed record ResourceSession(Guid Id, Guid TargetId, string TargetName, string Account,
     DateTimeOffset CreatedAt, string State);
 internal sealed record ResourceList(ResourceTarget[] Targets, ResourceSession[] Sessions);
-internal sealed record ResourceSelection(Guid? TargetId = null, Guid? SessionId = null, bool Refresh = false);
+internal sealed record ResourceSelection(Guid? TargetId = null, Guid? SessionId = null,
+    bool Refresh = false, string? UploadPath = null);
 
 internal static class ResourceMenu
 {
@@ -22,6 +23,38 @@ internal static class ResourceMenu
             var selection = ReadSelection(resources, input, output);
             if (selection is not { Refresh: true })
                 return selection;
+        }
+    }
+
+    public static async Task<Guid?> SelectUploadTargetAsync(HttpClient http, Uri origin,
+        TextReader input, TextWriter output, CancellationToken cancellationToken = default)
+    {
+        while (true)
+        {
+            var resources = await http.GetFromJsonAsync(new Uri(origin, "/resources"),
+                ClientJsonContext.Default.ResourceList, cancellationToken);
+            if (resources?.Targets is null)
+                throw new InvalidOperationException("Server returned an invalid resource list.");
+            output.WriteLine();
+            output.WriteLine("可上传目标");
+            if (resources.Targets.Length == 0)
+                output.WriteLine("  暂无已授权的目标。");
+            for (var index = 0; index < resources.Targets.Length; index++)
+            {
+                var target = resources.Targets[index];
+                output.WriteLine($"  [{index + 1}] {Label(target.Name)} / {Label(target.Account)}");
+                output.WriteLine($"       {target.Id}");
+            }
+            output.WriteLine();
+            output.Write("输入目标编号，r 刷新，q 退出：");
+            var value = input.ReadLine()?.Trim();
+            if (value is null || string.Equals(value, "q", StringComparison.OrdinalIgnoreCase))
+                return null;
+            if (string.Equals(value, "r", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (int.TryParse(value, out var number) && number >= 1 && number <= resources.Targets.Length)
+                return resources.Targets[number - 1].Id;
+            output.WriteLine("请选择列表中的编号，或输入 r / q。");
         }
     }
 
@@ -58,15 +91,33 @@ internal static class ResourceMenu
         output.WriteLine();
         while (true)
         {
-            output.Write("输入编号连接，r 刷新，q 退出：");
+            output.Write("输入编号连接，cp <本地文件> 上传，r 刷新，q 退出：");
             var value = input.ReadLine()?.Trim();
             if (value is null || string.Equals(value, "q", StringComparison.OrdinalIgnoreCase))
                 return null;
             if (string.Equals(value, "r", StringComparison.OrdinalIgnoreCase))
                 return new(Refresh: true);
+            if (value.StartsWith("cp ", StringComparison.OrdinalIgnoreCase))
+            {
+                var path = value[3..].Trim().Trim('"');
+                if (path.Length == 0)
+                {
+                    output.WriteLine("cp 需要本地文件路径。");
+                    continue;
+                }
+                output.Write("输入上传目标编号：");
+                var targetValue = input.ReadLine()?.Trim();
+                var targetOffset = resources.Sessions.Length;
+                if (int.TryParse(targetValue, out var targetNumber) &&
+                    targetNumber > targetOffset && targetNumber <= choices.Count &&
+                    choices[targetNumber - 1].TargetId is { } uploadTarget)
+                    return new(TargetId: uploadTarget, UploadPath: path);
+                output.WriteLine("请选择新建目标对应的编号。");
+                continue;
+            }
             if (int.TryParse(value, out var number) && number >= 1 && number <= choices.Count)
                 return choices[number - 1];
-            output.WriteLine("请选择列表中的编号，或输入 r / q。");
+            output.WriteLine("请选择列表中的编号，或输入 cp <本地文件> / r / q。");
         }
     }
 

@@ -8,6 +8,9 @@ internal static class Program
 
     public static async Task<int> Main(string[] args)
     {
+        if (string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "cccp", StringComparison.OrdinalIgnoreCase) ||
+            (args.Length > 0 && args[0] == "cccp"))
+            args = ["cp", .. args.Skip(args.Length > 0 && args[0] == "cccp" ? 1 : 0)];
         string? configPath = null;
         if (args.Length >= 2 && args[0] == "--config")
         {
@@ -15,7 +18,7 @@ internal static class Program
             args = args[2..];
         }
         if (args.Length >= 2 &&
-            args[0] is "status" or "login" or "whoami" or "connect" or "run" or "attach" &&
+            RequiresServer(args[0]) &&
             !args.Contains("--server", StringComparer.Ordinal) &&
             !args[1].StartsWith("--", StringComparison.Ordinal))
         {
@@ -44,7 +47,7 @@ internal static class Program
                 return 2;
             }
         }
-        if (args[0] is "status" or "login" or "whoami" or "connect" or "run" or "attach" or "probe-session" or "shell" &&
+        if (RequiresServer(args[0]) &&
             !args.Contains("--server", StringComparer.Ordinal))
         {
             try
@@ -79,6 +82,12 @@ internal static class Program
         if (args is ["attach", "--server", var attachServer, "--id", var sessionText] &&
             Guid.TryParse(sessionText, out var sessionId) && sessionId != Guid.Empty)
             return await WorkspaceClient.RunAsync(attachServer, null, sessionId);
+        if (args[0] == "cp")
+        {
+            if (!TryParseUploadCommand(args, out var uploadServer, out var localFile, out var target, out var error))
+                return InvalidCommand(error!);
+            return await WorkspaceClient.UploadAsync(uploadServer, localFile, target);
+        }
         if (args is ["probe-session", "--server", var probeServer])
             return await WorkspaceClient.RunLocalProbeAsync(probeServer);
         if (args is ["shell", "--server", var shellServer])
@@ -178,13 +187,82 @@ internal static class Program
         output.WriteLine("       charac whoami --server https://access.example.com");
         output.WriteLine("       charac run --server https://access.example.com --target <target-id>");
         output.WriteLine("       charac attach --server https://access.example.com --id <workspace-id>");
+        output.WriteLine("       charac cp <local-file> [--server https://access.example.com] [--target <target-id>]");
+        output.WriteLine("       cccp <local-file> [--server https://access.example.com] [--target <target-id>]");
         output.WriteLine("       charac probe-session --server http://127.0.0.1:5080");
         output.WriteLine("       charac shell --server http://127.0.0.1:5080");
         output.WriteLine("       charac callback --port <port> --code <code> --state <state>");
-        output.WriteLine("Login opens the browser and verifies identity with Server; tokens are kept only for this command.");
+        output.WriteLine("Login opens the browser when needed; the access and refresh session is shared from the user configuration directory.");
         output.WriteLine("Connect signs in, lists your resources when no ID is supplied, and opens an interactive workspace. Ctrl+] detaches; Server keeps the SSH session.");
         output.WriteLine("Run and attach sign in with OIDC and verify a Linux ls through the managed SSH workspace.");
         output.WriteLine("Probe-session verifies one loopback-only Client -> Server -> SSH ls without OIDC.");
         output.WriteLine("Shell opens a loopback-only interactive SSH terminal; Ctrl+] exits (F12 in key fallback mode).");
+    }
+
+    private static int InvalidCommand(string message)
+    {
+        Console.Error.WriteLine(message);
+        return 2;
+    }
+
+    private static bool RequiresServer(string command) => command is
+        "status" or "login" or "whoami" or "connect" or "run" or "attach" or "cp" or
+        "probe-session" or "shell";
+
+    private static bool TryParseUploadCommand(string[] args, out string server, out string localFile,
+        out Guid? target, out string? error)
+    {
+        server = string.Empty;
+        localFile = string.Empty;
+        target = null;
+        error = null;
+        var hasServer = false;
+        var hasFile = false;
+
+        for (var index = 1; index < args.Length; index++)
+        {
+            if (args[index] is "--server" or "--target")
+            {
+                if (index + 1 >= args.Length)
+                {
+                    error = $"{args[index]} requires a value.";
+                    return false;
+                }
+                if (args[index] == "--server")
+                {
+                    server = args[++index];
+                    hasServer = true;
+                }
+                else if (!Guid.TryParse(args[++index], out var parsedTarget) || parsedTarget == Guid.Empty)
+                {
+                    error = "--target must be a valid target GUID.";
+                    return false;
+                }
+                else
+                {
+                    target = parsedTarget;
+                }
+                continue;
+            }
+            if (args[index].StartsWith("--", StringComparison.Ordinal) || hasFile)
+            {
+                error = "cp accepts one local file and optional --server/--target options.";
+                return false;
+            }
+            localFile = args[index];
+            hasFile = true;
+        }
+
+        if (!hasServer)
+        {
+            error = "cp requires a Server origin.";
+            return false;
+        }
+        if (!hasFile)
+        {
+            error = "cp requires a local file.";
+            return false;
+        }
+        return true;
     }
 }

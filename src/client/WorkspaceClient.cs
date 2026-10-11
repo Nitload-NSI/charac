@@ -26,31 +26,43 @@ internal static class WorkspaceClient
             http.DefaultRequestHeaders.Add(ClientDeviceCredential.HeaderName, deviceCredential);
             if (interactive && (Console.IsInputRedirected || Console.IsOutputRedirected))
                 throw new InvalidOperationException("Connect requires an interactive terminal.");
-            var accessToken = await SignInAsync(http, origin, showIdentity: false);
-            if (targetId is null && sessionId is null)
+            var accessToken = (await SignInAsync(http, origin, showIdentity: false)).AccessToken;
+            var returnToMenu = interactive && targetId is null && sessionId is null;
+            while (true)
             {
-                var selection = await ResourceMenu.SelectAsync(http, origin, Console.In, Console.Out);
-                if (selection is null)
+                if (targetId is null && sessionId is null)
                 {
-                    Console.WriteLine("已取消连接。");
-                    return 0;
+                    var selection = await ResourceMenu.SelectAsync(http, origin, Console.In, Console.Out);
+                    if (selection is null)
+                    {
+                        Console.WriteLine("已取消连接。");
+                        return 0;
+                    }
+                    if (selection.UploadPath is { } uploadPath)
+                    {
+                        await UploadAsync(origin.ToString(), uploadPath, selection.TargetId);
+                        continue;
+                    }
+                    targetId = selection.TargetId;
+                    sessionId = selection.SessionId;
                 }
-                targetId = selection.TargetId;
-                sessionId = selection.SessionId;
+                var id = sessionId ?? await CreateAsync(http, origin, targetId!.Value, interactive);
+                if (interactive)
+                {
+                    Console.WriteLine($"Workspace: {id}");
+                    Console.WriteLine($"Reconnect: connect --server {origin} --id {id}");
+                    await RunInteractiveAsync(origin, id, accessToken, "/session", deviceCredential);
+                }
+                else
+                {
+                    await RunLsAsync(origin, id, accessToken, "/session", deviceCredential);
+                    Console.WriteLine($"Workspace remains on Server: {id}");
+                }
+                if (!returnToMenu)
+                    return 0;
+                targetId = null;
+                sessionId = null;
             }
-            var id = sessionId ?? await CreateAsync(http, origin, targetId!.Value, interactive);
-            if (interactive)
-            {
-                Console.WriteLine($"Workspace: {id}");
-                Console.WriteLine($"Reconnect: connect --server {origin} --id {id}");
-                await RunInteractiveAsync(origin, id, accessToken, "/session", deviceCredential);
-            }
-            else
-            {
-                await RunLsAsync(origin, id, accessToken, "/session", deviceCredential);
-                Console.WriteLine($"Workspace remains on Server: {id}");
-            }
-            return 0;
         }
         catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.Conflict)
         {
@@ -134,11 +146,159 @@ internal static class WorkspaceClient
         }
     }
 
-    private static async Task<string> SignInAsync(HttpClient http, Uri origin, bool showIdentity)
+    public static async Task<int> UploadAsync(string server, string localPath, Guid? targetId)
+    {
+        if (!Program.TryGetServerUri(server, out var origin))
+        {
+            Console.Error.WriteLine("Server must be an HTTPS origin (HTTP is allowed only for loopback).");
+            return 2;
+        }
+        try
+        {
+            if (!File.Exists(localPath))
+                throw new FileNotFoundException("Local file was not found.", localPath);
+            using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
+            var credential = ClientDeviceCredential.LoadOrCreate();
+            http.DefaultRequestHeaders.Add(ClientDeviceCredential.HeaderName, credential);
+            await SignInAsync(http, origin, showIdentity: false);
+            if (targetId is null)
+            {
+                targetId = await ResourceMenu.SelectUploadTargetAsync(http, origin, Console.In, Console.Out);
+                if (targetId is null)
+                {
+                    Console.WriteLine("已取消上传。");
+                    return 0;
+                }
+            }
+
+            var name = Path.GetFileName(localPath);
+            if (string.IsNullOrWhiteSpace(name) || name is "." or "..")
+                throw new InvalidOperationException("Local file name is invalid.");
+            var endpoint = new Uri(origin, $"/files/upload?target={targetId.Value}&name={Uri.EscapeDataString(name)}");
+            await using var stream = File.OpenRead(localPath);
+            await using var progressStream = new UploadProgressStream(stream, name, Console.Out,
+                !Console.IsOutputRedirected);
+            using var content = new StreamContent(progressStream);
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint) { Content = content };
+            request.Headers.ExpectContinue = true;
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            if (response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                var error = await ReadErrorCodeAsync(response);
+                throw new InvalidOperationException(error == "file_upload_not_authorized"
+                    ? "File upload is not authorized for this target."
+                    : "Server denied file upload.");
+            }
+            if ((int)response.StatusCode >= 400)
+                throw new InvalidOperationException($"File upload failed (HTTP {(int)response.StatusCode} {response.ReasonPhrase}).");
+            Console.WriteLine($"Uploaded {name} to target {targetId}.");
+            return 0;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or
+            InvalidOperationException or IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+        {
+            var detail = exception.InnerException is { Message: var innerMessage }
+                ? $" ({innerMessage})"
+                : string.Empty;
+            Console.Error.WriteLine($"File upload failed: {exception.Message}{detail}");
+            return 1;
+        }
+    }
+
+    private static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage response)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return document.RootElement.TryGetProperty("error", out var error) ? error.GetString() : null;
+        }
+        catch (JsonException) { return null; }
+    }
+
+    private sealed class UploadProgressStream(Stream inner, string fileName, TextWriter output,
+        bool enabled) : Stream
+    {
+        private readonly long _total = inner.Length;
+        private long _completed;
+        private DateTimeOffset _lastUpdate;
+
+        public override bool CanRead => inner.CanRead;
+        public override bool CanSeek => inner.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => inner.Length;
+        public override long Position { get => inner.Position; set => inner.Position = value; }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var read = inner.Read(buffer, offset, count);
+            Report(read);
+            return read;
+        }
+
+        public override int Read(Span<byte> buffer)
+        {
+            var read = inner.Read(buffer);
+            Report(read);
+            return read;
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            var read = await inner.ReadAsync(buffer, cancellationToken);
+            Report(read);
+            return read;
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count,
+            CancellationToken cancellationToken) => ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        private void Report(int read)
+        {
+            _completed += read;
+            if (!enabled)
+                return;
+            var now = DateTimeOffset.UtcNow;
+            if (read == 0 || now - _lastUpdate >= TimeSpan.FromMilliseconds(100))
+            {
+                _lastUpdate = now;
+                var percent = _total == 0 ? 100 : (int)Math.Clamp(_completed * 100 / _total, 0, 100);
+                var width = 30;
+                var filled = width * percent / 100;
+                output.Write($"\rUploading {fileName}: [{new string('#', filled)}{new string('-', width - filled)}] {percent,3}%");
+                output.Flush();
+                if (read == 0)
+                    output.WriteLine();
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                inner.Dispose();
+            base.Dispose(disposing);
+        }
+
+        public override void Flush() => inner.Flush();
+        public override Task FlushAsync(CancellationToken cancellationToken) => inner.FlushAsync(cancellationToken);
+        public override long Seek(long offset, SeekOrigin origin) => inner.Seek(offset, origin);
+        public override void SetLength(long value) => inner.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    private static async Task<OidcTokenSet> SignInAsync(HttpClient http, Uri origin, bool showIdentity)
     {
         var oidc = await ReadOidcSettingsAsync(http, origin);
-        var token = await OidcLogin.LoginAsync(http, oidc.Issuer, oidc.ClientId, oidc.DiscoveryUrl);
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var session = OidcSession.Load(oidc.Issuer, oidc.ClientId);
+        if (session is null || session.ExpiresAt <= DateTimeOffset.UtcNow.AddSeconds(30))
+        {
+            session = session?.RefreshToken is { Length: > 0 } refresh
+                ? await TryRefreshOrLoginAsync(http, oidc, refresh)
+                : await OidcLogin.LoginAsync(http, oidc.Issuer, oidc.ClientId, oidc.DiscoveryUrl);
+            OidcSession.Save(oidc.Issuer, oidc.ClientId, session);
+        }
+        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", session.AccessToken);
         using var response = await http.GetAsync(new Uri(origin, "/identity"));
         if (response.StatusCode == HttpStatusCode.Unauthorized)
             throw new InvalidOperationException("Server rejected the OIDC access token. Check issuer, audience and signing configuration.");
@@ -154,9 +314,27 @@ internal static class WorkspaceClient
         {
             Console.WriteLine($"Issuer: {issuer}");
             Console.WriteLine($"Subject: {subject}");
-            Console.WriteLine("This command does not save a login token; connect signs in when it starts.");
+            Console.WriteLine("The login session is shared by Client processes and stored in the user configuration directory.");
         }
-        return token;
+        return session;
+    }
+
+    private static async Task<OidcTokenSet> TryRefreshOrLoginAsync(HttpClient http,
+        (string Issuer, string ClientId, string DiscoveryUrl) oidc, string refreshToken)
+    {
+        try
+        {
+            using var response = await http.GetAsync(oidc.DiscoveryUrl);
+            response.EnsureSuccessStatusCode();
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var endpoint = new Uri(document.RootElement.GetProperty("token_endpoint").GetString()!);
+            return await OidcLogin.RefreshAsync(http, endpoint, oidc.ClientId, refreshToken);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException or JsonException)
+        {
+            OidcSession.Delete();
+            return await OidcLogin.LoginAsync(http, oidc.Issuer, oidc.ClientId, oidc.DiscoveryUrl);
+        }
     }
 
     private static async Task<(string Issuer, string ClientId, string DiscoveryUrl)> ReadOidcSettingsAsync(
