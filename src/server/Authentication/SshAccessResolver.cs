@@ -37,7 +37,8 @@ internal sealed class SshAccessResolver(AccessDbContext database, TimeProvider c
             grant.EndpointAccount.Account, grant.EndpointAccount.CertificatePrincipal, target.UserCertificateAuthorityId,
             target.UserCertificateAuthority?.PublicKey, target.UserCertificateAuthority?.SigningKeyReference,
             target.HostKeys.Select(x => x.PublicKey).ToArray(), grant.ExpiresAt,
-            grant.EndpointAccount.SshLoginKeyId, grant.EndpointAccount.SshLoginKey?.FileName);
+            grant.EndpointAccount.SshLoginKeyId, grant.EndpointAccount.SshLoginKey?.FileName,
+            grant.CanUpload);
     }
 
     private IQueryable<AccessGrant> AuthorizedGrants(ExternalIdentity identity)

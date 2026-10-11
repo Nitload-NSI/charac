@@ -39,12 +39,14 @@ internal static class AccessRegistrationCommand
                 ["database", "grant", "pre-register", var target, var userName, var account, var keyName] =>
                     await RegisterPreRegisteredGrantAsync(database, configuration, target, userName, account, keyName),
                 ["database", "grant", "pending"] => await ListPendingGrantsAsync(database),
+                ["database", "grant", "reset", var userName] => await ResetIdentityAsync(database, configuration, userName),
+                ["database", "grant", "upload", var userName, var targetName] => await EnableUploadAsync(database, configuration, userName, targetName),
                 ["database", "grant", "list"] => await ListGrantsAsync(database),
                 ["grant", var userName, var target, var account] =>
                     await RegisterPreRegisteredGrantAsync(database, configuration, target, userName, account, null),
                 ["grant", var userName, var target, var account, var keyName] =>
                     await RegisterPreRegisteredGrantAsync(database, configuration, target, userName, account, keyName),
-                _ => throw new ArgumentException("Use grant <user-name> <target-name> <account> [<login-key-name>], database target register <name> <address> <port> <host-key-file>, target list, database grant register <target-name> <oidc-subject> <account> [<login-key-name>], database grant pending, or database grant list.")
+                _ => throw new ArgumentException("Use grant <user-name> <target-name> <account> [<login-key-name>], database target register <name> <address> <port> <host-key-file>, target list, database grant register <target-name> <oidc-subject> <account> [<login-key-name>], database grant pending, database grant reset <user-name>, or database grant list.")
             };
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or
@@ -303,6 +305,71 @@ internal static class AccessRegistrationCommand
         foreach (var grant in pending)
             Console.WriteLine($"{grant.Id} target={grant.Target.Name} user={grant.UserName} issuer={grant.Issuer} account={grant.Account} key={grant.SshLoginKey?.Name ?? "(password)"} enabled={grant.Enabled}");
         Console.WriteLine($"Pending grants: {pending.Length}.");
+        return 0;
+    }
+
+    private static async Task<int> ResetIdentityAsync(AccessDbContext database,
+        Microsoft.Extensions.Configuration.IConfiguration configuration, string userName)
+    {
+        var oidc = OidcSettings.FromConfiguration(configuration)
+            ?? throw new InvalidOperationException("Configure [oidc] before resetting an identity.");
+        RequireText(userName, 256, "OIDC user name");
+
+        var identity = await database.Identities.SingleOrDefaultAsync(x =>
+            x.Issuer == oidc.Issuer && x.UserName == userName);
+        if (identity is null)
+        {
+            Console.WriteLine($"OIDC identity is not active: user={userName}.");
+            return 0;
+        }
+
+        await using var transaction = await database.Database.BeginTransactionAsync();
+        var grants = await database.Grants
+            .Where(x => x.IdentityId == identity.Id)
+            .ToArrayAsync();
+        foreach (var grant in grants)
+        {
+            var pending = await database.PreRegisteredGrants.SingleOrDefaultAsync(x =>
+                x.Issuer == oidc.Issuer && x.UserName == userName &&
+                x.EndpointAccountId == grant.EndpointAccountId);
+            if (pending is null)
+            {
+                database.PreRegisteredGrants.Add(new PreRegisteredGrant
+                {
+                    Issuer = oidc.Issuer,
+                    UserName = userName,
+                    TargetId = grant.TargetId,
+                    Account = grant.Account,
+                    EndpointAccountId = grant.EndpointAccountId,
+                    SshLoginKeyId = grant.SshLoginKeyId,
+                    CanUpload = grant.CanUpload,
+                    Enabled = true
+                });
+            }
+        }
+
+        database.Grants.RemoveRange(grants);
+        database.Identities.Remove(identity);
+        await database.SaveChangesAsync();
+        await transaction.CommitAsync();
+        Console.WriteLine($"OIDC identity reset to pending: user={userName} grants={grants.Length}.");
+        return 0;
+    }
+
+    private static async Task<int> EnableUploadAsync(AccessDbContext database,
+        Microsoft.Extensions.Configuration.IConfiguration configuration, string userName, string targetName)
+    {
+        var oidc = OidcSettings.FromConfiguration(configuration)
+            ?? throw new InvalidOperationException("Configure [oidc] before changing grants.");
+        RequireText(userName, 256, "OIDC user name");
+        RequireText(targetName, 128, "target name");
+        var grant = await database.Grants.SingleOrDefaultAsync(x =>
+            x.Identity.Issuer == oidc.Issuer && x.Identity.UserName == userName &&
+            x.Target.Name == targetName)
+            ?? throw new InvalidOperationException("The user does not have a grant for this target.");
+        grant.CanUpload = true;
+        await database.SaveChangesAsync();
+        Console.WriteLine($"File upload enabled: user={userName} target={targetName}.");
         return 0;
     }
 

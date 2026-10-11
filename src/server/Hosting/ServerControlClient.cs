@@ -7,11 +7,17 @@ namespace Charac.Server.Hosting;
 
 internal static class ServerControlClient
 {
-    public static async Task<int> RunAsync(string command, string? configPath)
+    public static async Task<int> RunAsync(string command)
+        => await PrintReplyAsync(SendAsync(command));
+
+    public static async Task<int> RunAsync(string[] arguments)
+        => await PrintReplyAsync(SendAsync(arguments));
+
+    private static async Task<int> PrintReplyAsync(Task<ServerControlReply> pendingReply)
     {
         try
         {
-            var reply = await SendAsync(command, configPath);
+            var reply = await pendingReply;
             Console.WriteLine($"{reply.Message} PID={reply.ProcessId}, workspaces={reply.Workspaces}.");
             if (reply.Disconnected is { } disconnected)
                 Console.WriteLine($"Disconnected client connections: {disconnected}.");
@@ -38,11 +44,16 @@ internal static class ServerControlClient
             UnicodeCategory.ParagraphSeparator ? '?' : ch;
     }).ToArray());
 
-    internal static async Task<ServerControlReply> SendAsync(string command, string? configPath)
+    internal static async Task<ServerControlReply> SendAsync(string command)
+        => await SendLineAsync(command);
+
+    internal static async Task<ServerControlReply> SendAsync(string[] arguments)
+        => await SendLineAsync(JsonSerializer.Serialize(new ServerControlRequest(arguments)));
+
+    private static async Task<ServerControlReply> SendLineAsync(string command)
     {
-        var resolved = WorkspaceAccessConfiguration.PathToLoad(configPath);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        using var pipe = new NamedPipeClientStream(".", ServerControlChannel.PipeName(resolved),
+        using var pipe = new NamedPipeClientStream(".", ServerControlChannel.PipeName(),
             PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         await pipe.ConnectAsync(timeout.Token);
         using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);

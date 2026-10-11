@@ -11,6 +11,13 @@ internal sealed class OidcIdentityBinding(AccessDbContext database)
     {
         var identity = await database.Identities.SingleOrDefaultAsync(x =>
             x.Issuer == external.Issuer && x.Subject == external.Subject, cancellationToken);
+        if (identity is null && external.UserName is not null)
+        {
+            var existingUsername = await database.Identities.SingleOrDefaultAsync(x =>
+                x.Issuer == external.Issuer && x.UserName == external.UserName, cancellationToken);
+            if (existingUsername is not null)
+                throw new InvalidOperationException("The OIDC username is already bound to another subject. Reset the identity before activating it again.");
+        }
         if (identity is { Enabled: false })
             return;
 
@@ -53,6 +60,7 @@ internal sealed class OidcIdentityBinding(AccessDbContext database)
                         Account = reservation.EndpointAccount.Account,
                         CertificatePrincipal = reservation.EndpointAccount.CertificatePrincipal,
                         SshLoginKeyId = reservation.EndpointAccount.SshLoginKeyId,
+                        CanUpload = reservation.CanUpload,
                         Enabled = true
                     });
                 }

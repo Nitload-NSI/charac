@@ -26,6 +26,24 @@ internal static class WorkspaceAccessConfiguration
             throw new FileNotFoundException("The specified configuration file does not exist.", explicitPath);
         }
 
+        var environmentPath = Environment.GetEnvironmentVariable("CHARAC_CONFIG");
+        if (!string.IsNullOrWhiteSpace(environmentPath) && File.Exists(environmentPath))
+            return Path.GetFullPath(environmentPath);
+
+        var systemPaths = OperatingSystem.IsWindows()
+            ? new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Charac", FileName)
+            }
+            : new[]
+            {
+                Path.Combine("/etc", "charac", FileName),
+                Path.Combine("/etc", "workspace-access", FileName)
+            };
+        var systemConfig = systemPaths.FirstOrDefault(File.Exists);
+        if (systemConfig is not null)
+            return systemConfig;
+
         var root = FindRepositoryRoot();
         if (root is not null)
         {

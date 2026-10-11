@@ -14,4 +14,5 @@ internal sealed record SshAccessDecision(
     IReadOnlyList<string> HostPublicKeys,
     DateTimeOffset? GrantExpiresAt,
     Guid? SshLoginKeyId,
-    string? SshLoginKeyFileName);
+    string? SshLoginKeyFileName,
+    bool CanUpload);

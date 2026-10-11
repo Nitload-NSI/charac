@@ -34,6 +34,9 @@ namespace Charac.Server.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<bool>("CanUpload")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("CertificatePrincipal")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -114,6 +117,9 @@ namespace Charac.Server.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
+
+                    b.Property<bool>("CanUpload")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");

@@ -24,7 +24,9 @@ internal static class Program
         args = parsed.Command;
         if (args is ["--help"] or ["-h"])
         {
-            Console.WriteLine("Usage: char_rac_server [--config <path>] [serve --local-probe] | grant <user-name> <target-name> <account> [<login-key-name>] | status | sessions | reload | disconnect --subject <oidc-subject> --confirm | endpoint_regist <name> <ssh-address> <private-key-path> | database migrate | database target register <name> <address> <port> <host-key-file> | database target list | database grant register <target-name> <oidc-subject> <account> [<login-key-name>] | database grant pre-register <target-name> <user-name> <account> [<login-key-name>] | database grant pending | database grant list | database key register <name> <file-name> | database key assign <grant-id> <name> | database key unassign <grant-id> | database key list | database key grants | database enroll-probe <target-name> <oidc-subject> <key-name> | database grant-probe <target-id> <issuer> <subject> | database list-probes | database clear-probes | ssh probe [<address> <port> <account> <host-public-key>] | ssh broker-probe [<address> <port> <account> <host-public-key>] | ssh key-probe <target-id> <oidc-subject>");
+            Console.WriteLine("Usage: char_rac_server status | sessions | reload | disconnect --subject <oidc-subject> --confirm");
+            Console.WriteLine("       char_rac_server grant | endpoint_regist | database  (running Server control channel)");
+            Console.WriteLine("       char_rac_server [--config <path>] serve | ssh");
             return 0;
         }
         if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
@@ -32,8 +34,8 @@ internal static class Program
             Console.Error.WriteLine("Charac.Server supports Windows and Linux.");
             return 1;
         }
-        if (args is ["endpoint_regist", var endpointName, var sshAddress, var privateKeyPath])
-            return await EndpointRegistrationCommand.RunAsync(endpointName, sshAddress, privateKeyPath, parsed.ConfigPath);
+        if (args is ["grant", ..] or ["database", ..] or ["endpoint_regist", ..])
+            return await ServerControlClient.RunAsync(args);
         if (args is ["endpoint_regist", ..])
         {
             Console.Error.WriteLine("Use endpoint_regist <name> <ssh-address> <private-key-path>.");
@@ -41,20 +43,12 @@ internal static class Program
         }
         if (args is ["database", "migrate"])
             return await DatabaseCommands.MigrateAsync(parsed.ConfigPath);
-        if (args is ["grant", ..])
-            return await AccessRegistrationCommand.RunAsync(args, parsed.ConfigPath);
-        if (args is ["database", "key", ..])
-            return await SshLoginKeyCommand.RunAsync(args, parsed.ConfigPath);
-        if (args is ["database", "target" or "grant", ..])
-            return await AccessRegistrationCommand.RunAsync(args, parsed.ConfigPath);
-        if (args is ["database", "enroll-probe", var targetName, var enrolledSubject, var keyName])
-            return await ProbeEnrollmentCommand.RunAsync(targetName, enrolledSubject, keyName, parsed.ConfigPath);
         if (args is ["status"] or ["sessions"] or ["reload"])
-            return await ServerControlClient.RunAsync(args[0], parsed.ConfigPath);
+            return await ServerControlClient.RunAsync(args[0]);
         if (args is ["disconnect", "--subject", var disconnectSubject, "--confirm"] &&
             !string.IsNullOrWhiteSpace(disconnectSubject) && disconnectSubject.Length <= 256 &&
             !disconnectSubject.Any(char.IsControl))
-            return await ServerControlClient.RunAsync("disconnect " + disconnectSubject, parsed.ConfigPath);
+            return await ServerControlClient.RunAsync("disconnect " + disconnectSubject);
         if (args is ["disconnect", ..])
         {
             Console.Error.WriteLine("Use disconnect --subject <oidc-subject> --confirm.");

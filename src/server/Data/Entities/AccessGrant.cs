@@ -14,6 +14,7 @@ internal sealed class AccessGrant
     public Guid? SshLoginKeyId { get; set; }
     public SshLoginKey? SshLoginKey { get; set; }
     public string? CertificatePrincipal { get; set; }
+    public bool CanUpload { get; set; }
     public bool Enabled { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
 }

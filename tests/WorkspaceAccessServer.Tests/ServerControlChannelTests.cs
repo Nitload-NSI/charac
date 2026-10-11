@@ -23,32 +23,36 @@ public sealed class ServerControlChannelTests
         try
         {
             await control.StartAsync(TestContext.Current.CancellationToken);
-            var status = await ServerControlClient.SendAsync("status", path);
+            var status = await ServerControlClient.SendAsync("status");
             Assert.True(status.Ok);
             Assert.Equal(Environment.ProcessId, status.ProcessId);
             Assert.Equal(0, status.Workspaces);
 
-            var sessions = await ServerControlClient.SendAsync("sessions", path);
+            var sessions = await ServerControlClient.SendAsync("sessions");
             Assert.True(sessions.Ok);
             Assert.Empty(Assert.IsType<ServerControlSession[]>(sessions.Sessions));
 
-            var disabled = await ServerControlClient.SendAsync("disconnect alice", path);
+            var disabled = await ServerControlClient.SendAsync("disconnect alice");
             Assert.False(disabled.Ok);
             Assert.Null(disabled.Disconnected);
 
-            var oversized = await ServerControlClient.SendAsync(new string('x', 513), path);
+            var oversized = await ServerControlClient.SendAsync(new string('x', 513));
             Assert.False(oversized.Ok);
-            Assert.True((await ServerControlClient.SendAsync("status", path)).Ok);
+            Assert.True((await ServerControlClient.SendAsync("status")).Ok);
+
+            var localGrant = await ServerControlClient.SendAsync(["grant"]);
+            Assert.False(localGrant.Ok);
+            Assert.Contains("Configure [database]", localGrant.Message);
 
             await File.WriteAllTextAsync(path, original.Replace("Default=Information", "Default=Warning"),
                 TestContext.Current.CancellationToken);
-            var reload = await ServerControlClient.SendAsync("reload", path);
+            var reload = await ServerControlClient.SendAsync("reload");
             Assert.True(reload.Ok);
             Assert.Equal("Warning", live["Logging:LogLevel:Default"]);
 
             await File.WriteAllTextAsync(path, original.Replace("5080", "5081"),
                 TestContext.Current.CancellationToken);
-            var rejected = await ServerControlClient.SendAsync("reload", path);
+            var rejected = await ServerControlClient.SendAsync("reload");
             Assert.False(rejected.Ok);
             Assert.Equal("Warning", live["Logging:LogLevel:Default"]);
             Assert.Equal("http://127.0.0.1:5080", live["server:listen"]);
@@ -82,12 +86,12 @@ public sealed class ServerControlChannelTests
             var credential = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
                 .TrimEnd('=').Replace('+', '-').Replace('/', '_');
             Assert.Equal(ClientDeviceStatus.Allowed, devices.Acquire(identity, credential, out var old));
-            var accepted = await ServerControlClient.SendAsync("disconnect alice", path);
+            var accepted = await ServerControlClient.SendAsync("disconnect alice");
             Assert.True(accepted.Ok);
             Assert.Equal(0, accepted.Disconnected);
             Assert.False(devices.TryUse(old!, () => new object(), out _));
             old!.Dispose();
-            var rejected = await ServerControlClient.SendAsync("disconnect ", path);
+            var rejected = await ServerControlClient.SendAsync("disconnect ");
             Assert.False(rejected.Ok);
         }
         finally

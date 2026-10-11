@@ -1,10 +1,10 @@
 using System.IO.Pipes;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Charac.Server.Authentication;
 using Charac.Server.Connections;
+using Charac.Server.Data;
 using Charac.Server.Ssh;
 
 namespace Charac.Server.Hosting;
@@ -17,6 +17,7 @@ internal sealed record ServerControlReply(bool Ok, string Message, int ProcessId
     public ServerControlSession[]? Sessions { get; init; }
     public int? Disconnected { get; init; }
 }
+internal sealed record ServerControlRequest(string[] Arguments);
 
 /// <summary>Same-user local control channel; never exposed through the HTTP listener.</summary>
 internal sealed class ServerControlChannel : IHostedService, IDisposable
@@ -48,14 +49,7 @@ internal sealed class ServerControlChannel : IHostedService, IDisposable
         _oidcIssuer = startup["oidc:issuer"]?.Trim();
     }
 
-    public static string PipeName(string configPath)
-    {
-        var path = Path.GetFullPath(configPath);
-        if (OperatingSystem.IsWindows())
-            path = path.ToUpperInvariant();
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(path));
-        return "workspace-access-" + Convert.ToHexString(hash.AsSpan(0, 12));
-    }
+    public static string PipeName() => "charac-server-control";
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -64,7 +58,7 @@ internal sealed class ServerControlChannel : IHostedService, IDisposable
         return Task.CompletedTask;
     }
 
-    private NamedPipeServerStream CreatePipe() => new(PipeName(_configPath), PipeDirection.InOut, 1,
+    private NamedPipeServerStream CreatePipe() => new(PipeName(), PipeDirection.InOut, 1,
         PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
     private async Task ListenAsync(NamedPipeServerStream first, CancellationToken cancellationToken)
@@ -115,7 +109,10 @@ internal sealed class ServerControlChannel : IHostedService, IDisposable
         using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
         using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
         var command = await ReadCommandAsync(reader, deadline.Token);
-        var reply = command switch
+        var request = TryReadRequest(command);
+        var reply = request is not null
+            ? await RunManagementCommandAsync(request.Arguments)
+            : command switch
         {
             "status" => new ServerControlReply(true, "Server is running.", Environment.ProcessId, _workspaces.Count),
             "sessions" => ListSessions(),
@@ -126,6 +123,78 @@ internal sealed class ServerControlChannel : IHostedService, IDisposable
         };
         await writer.WriteLineAsync(JsonSerializer.Serialize(reply).AsMemory(), deadline.Token);
     }
+
+    private static ServerControlRequest? TryReadRequest(string? command)
+    {
+        if (string.IsNullOrWhiteSpace(command) || !command.StartsWith('{'))
+            return null;
+        try
+        {
+            return JsonSerializer.Deserialize<ServerControlRequest>(command);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<ServerControlReply> RunManagementCommandAsync(string[] arguments)
+    {
+        if (arguments.Length == 0 || arguments.Any(string.IsNullOrWhiteSpace))
+            return ControlFailure("Management command arguments are invalid.");
+
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+        var previousOutput = Console.Out;
+        var previousError = Console.Error;
+        Console.SetOut(output);
+        Console.SetError(error);
+        int exitCode;
+        try
+        {
+            exitCode = arguments[0] switch
+            {
+                "grant" => await AccessRegistrationCommand.RunAsync(arguments, _configPath),
+                "endpoint_regist" when arguments is ["endpoint_regist", var name, var address, var keyPath] =>
+                    await EndpointRegistrationCommand.RunAsync(name, address, keyPath, _configPath),
+                "database" => await RunDatabaseCommandAsync(arguments),
+                _ => -1
+            };
+        }
+        finally
+        {
+            Console.SetOut(previousOutput);
+            Console.SetError(previousError);
+        }
+
+        if (exitCode < 0)
+            return ControlFailure("Unsupported management command.");
+        var message = output.ToString().Trim();
+        var errorText = error.ToString().Trim();
+        if (errorText.Length > 0)
+            message = errorText;
+        return new ServerControlReply(exitCode == 0, message.Length == 0
+            ? (exitCode == 0 ? "Management command completed." : "Management command failed.")
+            : message, Environment.ProcessId, _workspaces.Count);
+    }
+
+    private async Task<int> RunDatabaseCommandAsync(string[] arguments) => arguments switch
+    {
+        ["database", "migrate"] => await DatabaseCommands.MigrateAsync(_configPath),
+        ["database", "key", ..] => await SshLoginKeyCommand.RunAsync(arguments, _configPath),
+        ["database", "target" or "grant", ..] => await AccessRegistrationCommand.RunAsync(arguments, _configPath),
+        ["database", "enroll-probe", var targetName, var subject, var keyName] =>
+            await ProbeEnrollmentCommand.RunAsync(targetName, subject, keyName, _configPath),
+        ["database", "list-probes"] => await ProbeRecordsCommand.RunAsync(false, _configPath),
+        ["database", "clear-probes"] => await ProbeRecordsCommand.RunAsync(true, _configPath),
+        ["database", "grant-probe", var targetText, var issuer, var subject]
+            when Guid.TryParse(targetText, out var targetId) =>
+            await ProbeGrantCommand.RunAsync(targetId, issuer, subject, _configPath),
+        _ => -1
+    };
+
+    private ServerControlReply ControlFailure(string message) =>
+        new(false, message, Environment.ProcessId, _workspaces.Count);
 
     private static async Task<string?> ReadCommandAsync(StreamReader reader, CancellationToken cancellationToken)
     {

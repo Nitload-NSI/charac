@@ -7,6 +7,7 @@ using Charac.Server.Authentication;
 using Charac.Server.Connections;
 using Charac.Server.Data;
 using Charac.Server.Ssh;
+using Charac.Server.FileIO;
 
 namespace Charac.Server.Hosting;
 
@@ -19,6 +20,8 @@ internal static class ServerApplication
             Args = args,
             ContentRootPath = AppContext.BaseDirectory
         });
+        builder.WebHost.ConfigureKestrel(options =>
+            options.Limits.MaxRequestBodySize = 512L * 1024 * 1024);
         var resolvedConfigPath = WorkspaceAccessConfiguration.PathToLoad(configPath);
         builder.Configuration.AddIniFile(resolvedConfigPath, optional: false, reloadOnChange: false);
         var settings = ServerSettings.FromConfiguration(builder.Configuration);
@@ -65,6 +68,7 @@ internal static class ServerApplication
             builder.Services.AddDbContext<AccessDbContext>(options => DatabaseSettings.Configure(options, connection));
             builder.Services.AddScoped<OidcIdentityBinding>();
             builder.Services.AddScoped<SshAccessResolver>();
+            builder.Services.AddScoped<SshFileUploader>();
             builder.Services.AddScoped<SshBroker>();
             builder.Services.AddSingleton<WorkspaceRecordStore>();
         }
@@ -145,6 +149,8 @@ internal static class ServerApplication
             }, statusCode: StatusCodes.Status503ServiceUnavailable);
         });
         ClientApiRoutes.Map(app, oidc, connection is not null);
+        if (oidc is not null && connection is not null)
+            FileIORoutes.Map(app);
         if (probeSettings is not null)
             LocalProbeRoutes.Map(app, probeSettings);
         app.Logger.LogInformation("Server started with SSH workspace manager and OIDC configuration status: {Configured}.", oidc is not null);

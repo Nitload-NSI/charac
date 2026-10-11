@@ -13,5 +13,6 @@ internal sealed class PreRegisteredGrant
     public SshEndpointAccount EndpointAccount { get; set; } = null!;
     public Guid? SshLoginKeyId { get; set; }
     public SshLoginKey? SshLoginKey { get; set; }
+    public bool CanUpload { get; set; }
     public bool Enabled { get; set; }
 }
