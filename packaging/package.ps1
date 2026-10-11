@@ -103,7 +103,7 @@ if ($Target -eq 'ClientMsi') {
     if (-not $WixPath) { $WixPath = Join-Path $repository 'temp/tools/wix.exe' }
     if (-not (Test-Path -LiteralPath $WixPath -PathType Leaf)) { throw 'WiX CLI 6.0.2 is required; pass -WixPath.' }
     $output = Join-Path $packages "charac-client_${version}_win-x64.msi"
-    & $WixPath build '-arch' 'x64' '-d' "PackageVersion=$version" '-d' "PayloadDir=$payload" '-d' "ConfigTemplatePath=$(Join-Path $repository 'client.config.example')" '-d' "LicensePath=$(Join-Path $repository 'LICENSE')" '-pdbtype' 'none' '-o' $output (Join-Path $PSScriptRoot 'windows/Client.wxs')
+    & $WixPath build '-arch' 'x64' '-ext' 'WixToolset.UI.wixext' '-d' "PackageVersion=$version" '-d' "PayloadDir=$payload" '-d' "ConfigTemplatePath=$(Join-Path $repository 'client.config.example')" '-d' "LicensePath=$(Join-Path $repository 'LICENSE')" '-d' "LicenseRtfPath=$(Join-Path $PSScriptRoot 'windows/License.rtf')" '-d' "CccpLauncherPath=$(Join-Path $PSScriptRoot 'windows/cccp.cmd')" '-pdbtype' 'none' '-o' $output (Join-Path $PSScriptRoot 'windows/Client.wxs')
     if ($LASTEXITCODE -ne 0) { throw "WiX failed with exit code $LASTEXITCODE." }
     Write-Output $output
     exit 0
@@ -135,6 +135,7 @@ if ($Target -eq 'ClientTermuxDeb') {
         Add-PackageFile $lines $file.FullName "$prefix/opt/charac/$relative" $mode
     }
     Add-PackageFile $lines (Join-Path $PSScriptRoot 'termux/charac') "$prefix/bin/charac" '0755'
+    Add-PackageFile $lines (Join-Path $PSScriptRoot 'termux/cccp') "$prefix/bin/cccp" '0755'
     Add-PackageFile $lines (Join-Path $repository 'LICENSE') "$prefix/share/doc/charac/LICENSE"
     Add-PackageFile $lines (Join-Path $repository 'src/client/Assets/Fonts/IBM-Plex-LICENSE.txt') "$prefix/share/doc/charac/IBM-Plex-LICENSE.txt"
     $config = Join-Path $scratch 'charac-termux.yaml'

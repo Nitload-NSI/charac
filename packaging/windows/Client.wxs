@@ -1,7 +1,10 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+  xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="Charac Client" Manufacturer="nitload" Version="$(var.PackageVersion)"
            UpgradeCode="0F2E0762-42F8-431B-BA94-B8BD63B0C103" Scope="perMachine">
     <MajorUpgrade DowngradeErrorMessage="A newer Charac Client is already installed." />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtfPath)" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
     <MediaTemplate EmbedCab="yes" />
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="CompanyFolder" Name="nitload">
@@ -20,6 +23,9 @@
     <Component Id="ClientLicense" Directory="INSTALLFOLDER" Guid="*">
       <File Id="ClientLicenseFile" Source="$(var.LicensePath)" KeyPath="yes" />
     </Component>
+    <Component Id="CccpLauncher" Directory="INSTALLFOLDER" Guid="*">
+      <File Id="CccpLauncherFile" Source="$(var.CccpLauncherPath)" KeyPath="yes" />
+    </Component>
     <Feature Id="Complete" Title="Charac Client" Level="1">
       <Files Directory="INSTALLFOLDER" Include="$(var.PayloadDir)\**">
         <Exclude Files="$(var.PayloadDir)\**.pdb" />
@@ -27,6 +33,7 @@
       <ComponentRef Id="ClientPath" />
       <ComponentRef Id="ClientConfigTemplate" />
       <ComponentRef Id="ClientLicense" />
+      <ComponentRef Id="CccpLauncher" />
     </Feature>
   </Package>
 </Wix>

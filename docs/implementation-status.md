@@ -24,5 +24,9 @@
 | WebSocket 协议完善 | 心跳、丢失输出恢复和终端状态快照 |
 | 客户端终端 | 正式 `connect` 的持续交互及 `ls` 已实测；尺寸变化、正常退出及重新附着待复测；工作区选择菜单已实现，自动重连待实现 |
 | 目标平台验收 | Windows/Linux sshd、用户环境、终端应用和 VirtioFS |
+| 运行时管理通道 | `grant`、`database`、密钥和目标管理通过运行中的 Server 本机管理通道执行；Server 未运行时明确失败 |
+| 运行时管理通道实现 | 已实现；管理参数通过当前用户本机 Named Pipe 发送，Server 使用自身配置和 DbContext 执行 |
+| Host 文件上传 | Server 端初版：授权用户上传单个文件到固定目录 `~/characfile/<file-name>`，不接受远程目录；计划提供 `charac cp <local-file>` 和等价短命令 `cccp <local-file>`，目标通过资源选择或 `--target` 指定；仍需定义覆盖策略、断点/失败处理和审计 |
+| 持久化 Client 登录会话 | 待实现：保存受保护的 refresh token，使后续 `charac connect` 优先静默刷新而不是重新打开 OIDC；需支持注销、撤销/过期回退、refresh token rotation，以及 Windows DPAPI、Linux Secret Service/受限文件、Termux 安全存储边界 |
 
 /health/live 表示 HTTP 进程存活。/health/ready 当前仍返回 HTTP 503，实际检查数据库连接、迁移与读取权限，并列出尚未完成的 ssh-backend-credential、terminal-client 和 session-e2e-validation；缺少 OIDC 配置或数据库未就绪时还会列出相应项。Server 进程或后端 SSH 连接终止后，原终端是否可恢复取决于另行部署的目标端持久化设施；当前设计只保证客户端断线期间由运行中的 Server 持有连接。

@@ -28,6 +28,17 @@ OIDC 授权与 SSH 后端认证是两个边界。Server 只能为已授权的目
 
 首期断线持续性以 Server 与后端 SSH 连接存活为条件。Server 崩溃或内网 SSH 断开会失去该 SSH 终端；要跨越这一边界，未来需要目标机器上独立的会话持有者。画面恢复还需要持续消费 VT 输出、保持容量上限并生成一致的快照。
 
+## 管理命令边界
+
+运行时管理命令应发送给正在运行的 Server，通过同服务账户可访问的本机 Unix socket/Named Pipe 执行，而不是由外部命令直接打开 PostgreSQL。目标接口为：
+
+```text
+charac grant --reset <user-name>
+charac grant <user-name> <target-name> <account> [<login-key-name>]
+```
+
+Server 负责在自己的 DbContext 中完成授权、预注册、身份重置和数据库管理，并统一写入日志与审计；Server 未运行时，这类命令应明确失败。`--config` 只是 Server 启动和本地探测命令的配置路径覆盖，不应成为运行时管理命令的必需参数。
+
 ## 已有框架
 
 `SshWorkspaceManager` 为每个工作区建立一份 `WorkspaceConnectionGate`，以不可伪造的 lease 和递增 generation 仲裁接管，并在同一临界区校验输入入队。认证、授权与账户映射完成后才可调用该核心。Data/ 已实现 PostgreSQL 管理模型与迁移，Authentication/SshAccessResolver 通过一次 LINQ 查询解析授权和目标信任配置，见[数据库](database.md)。当前已有 OIDC、内部 SSH 和 WebSocket 的首版集成；托管密钥的真实 SSH 连接与正式端到端环境验收仍待完成，见[交付状态](implementation-status.md)。
