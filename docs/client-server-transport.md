@@ -1,5 +1,20 @@
 # Client 与 Server 的单域名入口
 
+## TLS 首次信任
+
+Client 优先使用系统 TLS 信任链。系统不信任某个 HTTPS origin 的证书时，Client 只在证书有效期正常、证书主机名/IP 匹配且链错误仅为未知根/不完整链时进入首次信任确认；其他证书错误直接拒绝。确认前不会发送 HTTP 请求或 OIDC 凭据。
+
+首次确认显示证书主题、颁发者、有效期和公钥 SPKI 的 SHA-256 指纹。用户应通过独立可信渠道核对指纹；接受后，Client 将该 origin 的公钥指纹保存在当前用户的 `server-trust.json`。此记录仅供 Charac Client 使用，不安装到 Windows/Linux 的全局信任库，也不影响 OIDC Provider 的 TLS 验证。HTTP 与 WebSocket 使用同一条规则。
+
+已经由系统公有 CA 验证通过的证书不会触发提示。已 pin 的 origin 若公钥变化，Client 会再次显示警告并要求确认；拒绝、证书过期或名称/IP 不匹配都不会继续连接。Caddy 入口证书自动续期时应保留同一公钥，例如在对应站点的 TLS 配置中启用 `reuse_private_keys`，否则密钥轮换会触发重新确认。更新 Client 包不会在线获取或自动信任证书；首次 `connect`/`login`/`cp` 握手时才检查。
+
+可审计或撤销 Client 本地记录：
+
+```text
+charac trust list
+charac trust remove https://<server-ip>:<port>
+```
+
 ## 配置域名与监听地址
 
 Server 可通过全局 `--config <路径>` 显式指定 INI 配置；未指定时，开发环境优先读取仓库根目录的 `workspace-access.config`，发布时需要提供外部配置路径，或自行将同名文件放在可执行文件旁。启动时加载，修改后需重启。配置示例：

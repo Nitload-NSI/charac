@@ -38,5 +38,7 @@ Server 运行时只需 `--config /etc/charac/workspace-access.config`。这一�
 
 Client RPM 安装自包含程序到 `/opt/charac/client`，并提供 `/usr/bin/charac` 命令。Windows MSI 以 per-machine 方式安装到 `Program Files\nitload\charac`，会触发 UAC 管理员授权，并把安装目录加入系统 `PATH`；新终端可运行 `charac.exe --help`。MSI 内嵌所需文件，不依赖独立 CAB。两个 Client 包均不预置登录令牌或目标配置。
 
+对使用 Caddy 私有 CA 的 HTTPS 入口，Client 不尝试安装系统根证书。首次连接时会检查 origin 的证书主机名/IP 和有效期，显示公钥 SHA-256 指纹并要求用户确认；确认记录按 scheme/host/port 保存到当前用户配置目录的 `server-trust.json`，供 HTTP 和 WebSocket 共用。管理员应通过独立可信渠道分发/核对指纹。系统已信任的公有 CA 证书不触发确认；证书密钥变化会重新询问。Caddy 自动续期若需避免重复提示，应为专用入口配置稳定的证书公钥（例如 `reuse_private_keys`）。客户端可用 `charac trust list` 检查记录、用 `charac trust remove <origin>` 撤销；更新安装包不会自动接受新证书。
+
 RPM 和 MSI 已完成本地构建验证，并在目标环境完成 Server RPM / Windows Client 的可用性验证；Termux DEB 的 Device Flow 候选实现尚未完成真实设备验收。MSI 仍需在正常启用 Windows Installer 服务的机器上完成安装、升级、卸载验收；受限环境里的 ICE 校验无法连接 Windows Installer 服务。
 Client 可在用户级 INI 的 `[client] server` 写入默认 HTTPS origin，样例见仓库根目录 `client.config.example`；Client RPM 另安装到 `/usr/share/doc/charac-client/client.config.example`，MSI 则安装到程序目录。Windows 默认读取 `%APPDATA%\Charac\client.config`；Linux/Termux 默认读取 `$XDG_CONFIG_HOME/charac/client.config`，未设置时读取 `~/.config/charac/client.config`。首次执行无配置的 Client 命令会自动创建默认配置目录，但不会写入服务器地址。之后可直接执行 `charac connect`（Windows 为 `charac.exe connect`），或使用更短的 `charac connect https://access.example.com`；`--server <origin>` 可临时覆盖，`--config <路径>` 可在命令前选用其他配置。该文件只存入口地址，不存 OIDC 令牌；旧版 `%APPDATA%\CharRAC`、`~/.config/char-rac` 配置在新位置不存在时仍会自动读取。Client 安装级设备凭据仍独立存于用户本地应用数据目录，不能复制到多台设备共用。
