@@ -47,6 +47,34 @@ internal static class Program
                 return 2;
             }
         }
+        if (args is ["trust", "list"])
+        {
+            try
+            {
+                ServerCertificateTrust.List(Console.Out);
+                return 0;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                Console.Error.WriteLine($"Could not read server trust records: {exception.Message}");
+                return 1;
+            }
+        }
+        if (args is ["trust", "remove", var trustedServer] && TryGetServerUri(trustedServer, out var trustedOrigin))
+        {
+            try
+            {
+                Console.WriteLine(ServerCertificateTrust.Remove(trustedOrigin)
+                    ? $"Removed TLS trust for {trustedOrigin}."
+                    : $"No saved TLS trust for {trustedOrigin}.");
+                return 0;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                Console.Error.WriteLine($"Could not update server trust records: {exception.Message}");
+                return 1;
+            }
+        }
         if (RequiresServer(args[0]) &&
             !args.Contains("--server", StringComparer.Ordinal))
         {
@@ -110,7 +138,7 @@ internal static class Program
 
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            using var client = ServerCertificateTrust.CreateHttpClient(serverUri, TimeSpan.FromSeconds(10));
             var statusUri = new Uri(serverUri, "/status");
             using var response = await client.GetAsync(statusUri);
             response.EnsureSuccessStatusCode();
@@ -180,6 +208,8 @@ internal static class Program
         output ??= Console.Out;
         output.WriteLine("Usage: charac [--config <client.config>] status [--server https://access.example.com]");
         output.WriteLine("       charac config --default-server https://access.example.com");
+        output.WriteLine("       charac trust list");
+        output.WriteLine("       charac trust remove https://server-or-ip:port");
         output.WriteLine("       charac login --server https://access.example.com");
         output.WriteLine("       charac connect [--server https://access.example.com]");
         output.WriteLine("       charac connect [--server https://access.example.com] --target <target-id>");

@@ -21,7 +21,7 @@ internal static class WorkspaceClient
         }
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            using var http = ServerCertificateTrust.CreateHttpClient(origin, TimeSpan.FromSeconds(30));
             var deviceCredential = ClientDeviceCredential.LoadOrCreate();
             http.DefaultRequestHeaders.Add(ClientDeviceCredential.HeaderName, deviceCredential);
             if (interactive && (Console.IsInputRedirected || Console.IsOutputRedirected))
@@ -92,7 +92,7 @@ internal static class WorkspaceClient
         }
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            using var http = ServerCertificateTrust.CreateHttpClient(origin, TimeSpan.FromSeconds(30));
             var id = await CreateLocalAsync(http, origin, interactive);
             try
             {
@@ -131,7 +131,7 @@ internal static class WorkspaceClient
         }
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            using var http = ServerCertificateTrust.CreateHttpClient(origin, TimeSpan.FromSeconds(30));
             http.DefaultRequestHeaders.Add(ClientDeviceCredential.HeaderName,
                 ClientDeviceCredential.LoadOrCreate());
             await SignInAsync(http, origin, showIdentity: true);
@@ -157,7 +157,7 @@ internal static class WorkspaceClient
         {
             if (!File.Exists(localPath))
                 throw new FileNotFoundException("Local file was not found.", localPath);
-            using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
+            using var http = ServerCertificateTrust.CreateHttpClient(origin, TimeSpan.FromMinutes(30));
             var credential = ClientDeviceCredential.LoadOrCreate();
             http.DefaultRequestHeaders.Add(ClientDeviceCredential.HeaderName, credential);
             await SignInAsync(http, origin, showIdentity: false);
@@ -668,6 +668,7 @@ internal static class WorkspaceClient
         var socket = new ClientWebSocket();
         try
         {
+            ServerCertificateTrust.ConfigureWebSocket(socket, origin);
             if (accessToken is not null)
                 socket.Options.SetRequestHeader("Authorization", "Bearer " + accessToken);
             if (deviceCredential is not null)
