@@ -21,6 +21,7 @@
 
 - [开发与构建](development.md)
 - [验证与验收](testing.md)
+- [Windows Minecraft GUI 示例](windows-minecraft-gui.md)
 - [Windows 部署模板](../deploy/windows/README.md)
 - [Linux 部署模板](../deploy/linux/README.md)
 

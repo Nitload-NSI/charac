@@ -30,6 +30,15 @@ jobs:
         run: dotnet restore build/Build.csproj --locked-mode
       - name: Verify and publish
         run: dotnet run --project build/Build.csproj --configuration Release --no-restore -- --target Publish --runtime ${{ matrix.runtime }} --locked-restore
+      - uses: actions/setup-python@v5
+        if: runner.os == 'Windows'
+        with:
+          python-version: '3.12'
+      - name: Verify Windows Minecraft GUI example
+        if: runner.os == 'Windows'
+        env:
+          CHARAC_EXE: ${{ github.workspace }}/artifacts/publish/win-x64/client/charac.exe
+        run: python examples/windows-minecraft-gui/test_charac_gui.py
       - uses: actions/upload-artifact@v4
         with:
           name: charac-${{ matrix.runtime }}

@@ -27,6 +27,8 @@ dotnet run --project src/client -- connect --server http://127.0.0.1:5080
 
 Android 客户端可用 `./build.ps1 --target Publish --runtime linux-bionic-arm64` 发布，详见[Android CLI](docs/platforms/android-client.md)。Linux 使用 `bash ./build.sh`。Server 使用 INI 配置域名和监听地址；开发时读取仓库根目录的 `workspace-access.config`，发布时用 `--config <路径>` 指向独立配置文件。构建中间文件与二进制统一位于根目录 `temp/<项目名>/`。Windows/Linux 发布产物分别位于 `artifacts/publish/<runtime>/server/` 与 `client/`；Android/Termux 仅发布 `client/`。
 
+另提供可选的 [Windows Minecraft GUI 示例](docs/windows-minecraft-gui.md)，通过已安装的 CLI 完成浏览器登录、文件拖拽上传、备份部署及 Linux/tmux 服务开停。示例使用 Python 标准库，需配置实际目标，不属于 MSI 默认安装内容。
+
 ## 目录
 
 ```text

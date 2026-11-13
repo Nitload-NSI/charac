@@ -1,0 +1,13 @@
+{
+  "charac_exe": "",
+  "server": "https://access.example.com",
+  "target": "",
+  "target_name": "Minecraft server",
+  "local_folder": "",
+  "upload_folder": "/home/minecraft/characfile",
+  "mc_folder": "/srv/minecraft",
+  "tmux_session": "mc120",
+  "forge_args": "@libraries/net/minecraftforge/forge/1.20.1-47.4.1/unix_args.txt",
+  "mc_port": 25565,
+  "maintainer_group": ""
+}
